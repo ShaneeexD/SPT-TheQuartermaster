@@ -14,12 +14,12 @@ public class FirestoreService(
 )
 {
     private FirestoreDb? _db;
+    private DateTime _lastExpiredCleanup = DateTime.MinValue;
     public bool IsEnabled { get; private set; }
 
     public async Task InitialiseAsync()
     {
-        var config = configService.Config;
-        if (!config.ModEnabled)
+        if (!configService.Config.ModEnabled)
         {
             IsEnabled = false;
             logger.Warning("[TheQuartermaster] Firestore disabled (mod disabled).");
@@ -70,6 +70,8 @@ public class FirestoreService(
             }.BuildAsync();
             IsEnabled = true;
             logger.Info($"[TheQuartermaster] Firestore initialised for project {projectId}.");
+
+            await CleanupExpiredListingsAsync();
         }
         catch (Exception ex)
         {
@@ -227,9 +229,52 @@ public class FirestoreService(
         }
     }
 
+    public async Task CleanupExpiredListingsAsync()
+    {
+        if (!IsEnabled || _db is null)
+        {
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        if (now - _lastExpiredCleanup < TimeSpan.FromMinutes(QuartermasterConstants.Timings.ExpiredCleanupIntervalMinutes))
+        {
+            return;
+        }
+
+        _lastExpiredCleanup = now;
+
+        try
+        {
+            var query = _db.Collection(QuartermasterConstants.FirestoreCollections.Listings)
+                .WhereEqualTo("status", ListingStatus.Active)
+                .WhereLessThanOrEqualTo("expires_at", Timestamp.GetCurrentTimestamp())
+                .Limit(100);
+
+            var snapshot = await query.GetSnapshotAsync();
+            var batch = _db.StartBatch();
+            var count = 0;
+            foreach (var doc in snapshot.Documents)
+            {
+                batch.Update(doc.Reference, "status", ListingStatus.Expired);
+                count++;
+            }
+
+            if (count > 0)
+            {
+                await batch.CommitAsync();
+                logger.Info($"[TheQuartermaster] Marked {count} expired listings as expired.");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Failed to cleanup expired listings: {ex.Message}", ex);
+        }
+    }
+
     private string HashProfileId(string profileId)
     {
-        var salt = configService.Config.SellerAnonymizationSalt;
+        var salt = QuartermasterConstants.Seller.AnonymizationSalt;
         var input = string.IsNullOrEmpty(salt) ? profileId : $"{profileId}:{salt}";
         var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(input));
         var hash = Convert.ToHexString(bytes).ToLowerInvariant();

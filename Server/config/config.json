@@ -2,12 +2,5 @@
   "modEnabled": true,
   "uploadConsent": true,
   "baseMarkupPercent": 15.0,
-  "minPrice": 100,
-  "maxPrice": 50000000,
-  "maxListingsPerPlayer": 100,
-  "listingDurationHours": 168,
-  "maxItemTreeSize": 100,
-  "debugLogging": false,
-  "vanillaItemsOnly": false,
-  "sellerAnonymizationSalt": ""
+  "vanillaItemsOnly": false
 }

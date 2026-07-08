@@ -120,23 +120,30 @@ public class SellPatch : AbstractPatch
                     continue;
                 }
 
-                if (_firestoreService?.IsEnabled != true)
+                if (_configService?.Config.UploadConsent == true)
                 {
-                    _logger?.Warning("[TheQuartermaster] Firestore is not enabled, cannot upload listing.");
-                    continue;
-                }
+                    if (_firestoreService?.IsEnabled != true)
+                    {
+                        _logger?.Warning("[TheQuartermaster] Firestore is not enabled, cannot upload listing.");
+                        continue;
+                    }
 
-                var uploadedListing = _firestoreService.UploadListingAsync(listing).GetAwaiter().GetResult();
-                if (uploadedListing is null)
+                    var uploadedListing = _firestoreService.UploadListingAsync(listing).GetAwaiter().GetResult();
+                    if (uploadedListing is null)
+                    {
+                        _logger?.Error($"[TheQuartermaster] Failed to upload listing for item {itemIdToFind}.");
+                        continue;
+                    }
+
+                    _logger?.Info($"[TheQuartermaster] Listed item {itemIdToFind} as listing {uploadedListing.Id}.");
+                }
+                else
                 {
-                    _logger?.Error($"[TheQuartermaster] Failed to upload listing for item {itemIdToFind}.");
-                    continue;
+                    _logger?.Info($"[TheQuartermaster] Upload consent disabled; selling {itemIdToFind} locally without global listing.");
                 }
 
                 _inventoryHelper?.RemoveItem(profileWithItemsToSell, itemId, sessionID, output);
                 uploaded++;
-
-                _logger?.Info($"[TheQuartermaster] Listed item {itemIdToFind} as listing {uploadedListing.Id}.");
             }
 
             _logger?.Info($"[TheQuartermaster] Uploaded {uploaded} listing(s) from player {sessionID}.");

@@ -44,9 +44,9 @@ public class ItemCompatibilityService(
             return false;
         }
 
-        if (itemTree.Count > configService.Config.MaxItemTreeSize)
+        if (itemTree.Count > QuartermasterConstants.Marketplace.MaxItemTreeSize)
         {
-            logger.Warning($"[TheQuartermaster] Listing tree size {itemTree.Count} exceeds max {configService.Config.MaxItemTreeSize}.");
+            logger.Warning($"[TheQuartermaster] Listing tree size {itemTree.Count} exceeds max {QuartermasterConstants.Marketplace.MaxItemTreeSize}.");
             return false;
         }
 

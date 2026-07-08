@@ -46,8 +46,6 @@ public class ConfigService(ISptLogger<ConfigService> logger)
         }
     }
 
-    public bool Debug => Config.DebugLogging;
-
     private static string ResolveSptDataPath(string modPath)
     {
         // modPath is expected to be SPT/user/mods/TheQuartermaster

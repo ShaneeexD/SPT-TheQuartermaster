@@ -19,6 +19,25 @@ public static class QuartermasterConstants
         "5696686a4bdc2da3298b456a"
     };
 
+    public static class Marketplace
+    {
+        public const int MinPrice = 100;
+        public const int MaxPrice = 50_000_000;
+        public const int MaxItemTreeSize = 100;
+        public const int ListingDurationHours = 168;
+        public const int ListingDurationSeconds = ListingDurationHours * 3600;
+    }
+
+    public static class Seller
+    {
+        public const string AnonymizationSalt = "";
+    }
+
+    public static class Timings
+    {
+        public const int ExpiredCleanupIntervalMinutes = 5;
+    }
+
     public static class FirestoreCollections
     {
         public const string Listings = "quartermaster_listings";

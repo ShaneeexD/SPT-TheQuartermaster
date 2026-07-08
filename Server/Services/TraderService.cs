@@ -224,6 +224,7 @@ public class TraderService(
 
         if (firestoreService.IsEnabled)
         {
+            await firestoreService.CleanupExpiredListingsAsync();
             var listings = await firestoreService.GetActiveListingsAsync();
             _activeListings.AddRange(listings.Where(l => !configService.Config.VanillaItemsOnly || l.IsVanilla));
             logger.Info($"[TheQuartermaster] Refreshed {_activeListings.Count} active listings from Firestore.");

@@ -27,17 +27,10 @@ Edit `user/mods/TheQuartermaster/config/config.json` to change the mod's behavio
 
 | Setting | Default | Description |
 |---|---|---|
-| `modEnabled` | `true` | Enable or disable the mod. |
+| `modEnabled` | `true` | Enable or disable the mod locally. |
 | `uploadConsent` | `true` | Allow your server to upload listings to the shared database. |
 | `baseMarkupPercent` | `15.0` | Markup applied to the base handbook price when listing items. |
-| `minPrice` | `100` | Minimum listing price. |
-| `maxPrice` | `50000000` | Maximum listing price. |
-| `maxListingsPerPlayer` | `100` | Maximum active listings a single player can have at once. |
-| `listingDurationHours` | `168` | How long listings remain active before expiring. |
-| `maxItemTreeSize` | `100` | Largest item tree (parent + children) that can be listed. |
 | `vanillaItemsOnly` | `false` | When `true`, only vanilla items can be listed or shown. |
-| `sellerAnonymizationSalt` | `""` | Optional salt used to hash seller identities. |
-| `debugLogging` | `false` | Extra logging for troubleshooting. |
 
 ## Notes & Limitations
 

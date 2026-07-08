@@ -40,22 +40,22 @@ public class ListingService(
         var qualityMultiplier = itemHelper.GetItemQualityModifierForItems(itemTree);
         var marketPrice = CalculateMarketPrice(basePrice, qualityMultiplier);
 
-        if (marketPrice < configService.Config.MinPrice)
+        if (marketPrice < QuartermasterConstants.Marketplace.MinPrice)
         {
             logger.Info($"[TheQuartermaster] Listing for {name} priced below minimum, adjusting to minimum.");
-            marketPrice = configService.Config.MinPrice;
+            marketPrice = QuartermasterConstants.Marketplace.MinPrice;
         }
 
-        if (marketPrice > configService.Config.MaxPrice)
+        if (marketPrice > QuartermasterConstants.Marketplace.MaxPrice)
         {
             logger.Warning($"[TheQuartermaster] Listing for {name} exceeds max price, capping.");
-            marketPrice = configService.Config.MaxPrice;
+            marketPrice = QuartermasterConstants.Marketplace.MaxPrice;
         }
 
         var requiredTpls = itemCompatibilityService.GetRequiredTemplates(itemTree).Select(t => t.ToString()).ToList();
         var isVanilla = itemCompatibilityService.IsVanilla(itemTree);
         var now = DateTime.UtcNow;
-        var expires = now.AddSeconds(configService.Config.GetListingDurationSeconds());
+        var expires = now.AddSeconds(QuartermasterConstants.Marketplace.ListingDurationSeconds);
 
         var listing = new QuartermasterListing
         {
@@ -122,7 +122,7 @@ public class ListingService(
 
     private string HashProfileId(string profileId)
     {
-        var salt = configService.Config.SellerAnonymizationSalt;
+        var salt = QuartermasterConstants.Seller.AnonymizationSalt;
         var input = string.IsNullOrEmpty(salt) ? profileId : $"{profileId}:{salt}";
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
         var hash = Convert.ToHexString(bytes).ToLowerInvariant();
