@@ -1,0 +1,9 @@
+{
+  "name": "TheQuartermaster",
+  "version": "1.0.0",
+  "description": "A global flea-market style trader that lets players sell and buy items through a Firestore-backed listing service.",
+  "author": "ShaneeexD",
+  "license": "MIT",
+  "main": "TheQuartermaster.Server.dll",
+  "sptVersion": "4.0.13"
+}

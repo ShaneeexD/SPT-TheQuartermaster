@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <RootNamespace>TheQuartermaster.Server</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <OutputType>Library</OutputType>
+    <Version>1.0.0</Version>
+    <OutputPath>bin\$(Configuration)\$(ProjectName)\$(AssemblyName)\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <AssemblyName>TheQuartermaster.Server</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SPTarkov.Common" Version="4.0.13" />
+    <PackageReference Include="SPTarkov.DI" Version="4.0.13" />
+    <PackageReference Include="SPTarkov.Reflection" Version="4.0.13" />
+    <PackageReference Include="SPTarkov.Server.Core" Version="4.0.13" />
+    <PackageReference Include="Google.Cloud.Firestore" Version="3.9.0" />
+    <PackageReference Include="ILRepack.FullAuto" Version="1.6.0" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- Copy mod data to output -->
+  <ItemGroup>
+    <None Include="db\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="config\config.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="package.json" CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="config\firebase-adminsdk.json" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <ILRepackBuildEnable>true</ILRepackBuildEnable>
+    <ILRepackTargetConfigurations>Debug;Release</ILRepackTargetConfigurations>
+    <ILRepackUnionTypes>true</ILRepackUnionTypes>
+    <ILRepackPerformInternalize>false</ILRepackPerformInternalize>
+    <ILRepackAllowDuplicateResources>true</ILRepackAllowDuplicateResources>
+    <ILRepackExcludeAssemblies>$(OutputPath)SPTarkov.Server.Core.dll;$(OutputPath)SPTarkov.Common.dll;$(OutputPath)SPTarkov.DI.dll;$(OutputPath)SPTarkov.Reflection.dll;$(OutputPath)SPTarkov.Server.Assets.dll;$(OutputPath)SPTarkov.Server.Web.dll;$(OutputPath)SPT.Server.dll;$(OutputPath)SPT.Server.Linux.dll;$(OutputPath)0Harmony.dll;$(OutputPath)FastCloner.dll;$(OutputPath)JetBrains.Annotations.dll;$(OutputPath)MudBlazor.dll;$(OutputPath)SemanticVersioning.dll;$(OutputPath)Mono.Cecil.dll;$(OutputPath)Mono.Cecil.Mdb.dll;$(OutputPath)Mono.Cecil.Pdb.dll;$(OutputPath)Mono.Cecil.Rocks.dll;$(OutputPath)MonoMod.Backports.dll;$(OutputPath)MonoMod.Core.dll;$(OutputPath)MonoMod.Iced.dll;$(OutputPath)MonoMod.ILHelpers.dll;$(OutputPath)MonoMod.RuntimeDetour.dll;$(OutputPath)MonoMod.Utils.dll;$(OutputPath)Microsoft.AspNetCore.Authorization.dll;$(OutputPath)Microsoft.AspNetCore.Components.dll;$(OutputPath)Microsoft.AspNetCore.Components.Forms.dll;$(OutputPath)Microsoft.AspNetCore.Components.Web.dll;$(OutputPath)Microsoft.AspNetCore.Metadata.dll;$(OutputPath)Microsoft.Extensions.Configuration.dll;$(OutputPath)Microsoft.Extensions.Configuration.Abstractions.dll;$(OutputPath)Microsoft.Extensions.Configuration.Binder.dll;$(OutputPath)Microsoft.Extensions.DependencyInjection.dll;$(OutputPath)Microsoft.Extensions.DependencyInjection.Abstractions.dll;$(OutputPath)Microsoft.Extensions.Diagnostics.dll;$(OutputPath)Microsoft.Extensions.Diagnostics.Abstractions.dll;$(OutputPath)Microsoft.Extensions.Http.dll;$(OutputPath)Microsoft.Extensions.Localization.dll;$(OutputPath)Microsoft.Extensions.Localization.Abstractions.dll;$(OutputPath)Microsoft.Extensions.Logging.dll;$(OutputPath)Microsoft.Extensions.Logging.Abstractions.dll;$(OutputPath)Microsoft.Extensions.Options.dll;$(OutputPath)Microsoft.Extensions.Options.ConfigurationExtensions.dll;$(OutputPath)Microsoft.Extensions.Primitives.dll;$(OutputPath)Microsoft.JSInterop.dll;$(OutputPath)System.IO.Hashing.dll</ILRepackExcludeAssemblies>
+  </PropertyGroup>
+
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <RemoveDir Directories="$(ProjectDir)Build\SPT\user\mods\TheQuartermaster" />
+    <MakeDir Directories="$(ProjectDir)Build\SPT\user\mods\TheQuartermaster" />
+    <ItemGroup>
+      <DbFiles Include="$(ProjectDir)db\**\*" />
+      <ConfigFiles Include="$(ProjectDir)config\config.json" />
+    </ItemGroup>
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ProjectDir)Build\SPT\user\mods\TheQuartermaster" />
+    <Copy SourceFiles="$(ProjectDir)package.json" DestinationFolder="$(ProjectDir)Build\SPT\user\mods\TheQuartermaster" />
+    <Copy SourceFiles="@(DbFiles)" DestinationFiles="@(DbFiles->'$(ProjectDir)Build\SPT\user\mods\TheQuartermaster\db\%(RecursiveDir)%(Filename)%(Extension)')" />
+    <Copy SourceFiles="@(ConfigFiles)" DestinationFiles="@(ConfigFiles->'$(ProjectDir)Build\SPT\user\mods\TheQuartermaster\config\%(Filename)%(Extension)')" />
+  </Target>
+</Project>

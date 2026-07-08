@@ -1,0 +1,100 @@
+###################
+# Visual Studio
+###################
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# Visual Studio cache/options directory
+.vs/
+
+# Visual Studio profiler
+*.psess
+*.vsp
+*.vspx
+*.sap
+
+# ReSharper
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+# JetBrains Rider
+.idea/
+*.sln.iml
+
+###################
+# .NET / NuGet
+###################
+
+# NuGet Packages
+*.nupkg
+*.snupkg
+**/packages/*
+!**/packages/build/
+
+# .NET Core
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+###################
+# SPT Modding
+###################
+
+# Game DLLs (too large for git, users must copy from their own game)
+**/References/*.dll
+!**/References/.gitkeep
+
+# BepInEx config files (user-specific)
+*.cfg
+
+# Example mods (reference only, don't track changes)
+Example-*/
+
+# SAIN API
+SAIN-API/
+
+# Game folder (if accidentally added)
+Game/
+
+###################
+# OS Files
+###################
+
+# Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+.directory
+firestore.rules
+firebase-adminsdk.json
+Server/Build
