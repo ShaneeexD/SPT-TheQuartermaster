@@ -21,6 +21,7 @@ public class TraderService(
     ItemHelper itemHelper,
     DatabaseService databaseService,
     ConfigServer configServer,
+    ItemCloneService itemCloneService,
     ImageRouter? imageRouter = null
 )
 {
@@ -252,24 +253,24 @@ public class TraderService(
                 continue;
             }
 
-            var assortItemId = new MongoId();
+            var itemTree = itemCloneService.DeserializeItemTree(listing.ItemTreeJson);
+            if (itemTree is null || itemTree.Count == 0)
+            {
+                logger.Warning($"[TheQuartermaster] Skipping listing {listing.Id}: could not deserialize item tree.");
+                continue;
+            }
+
+            var clonedTree = itemCloneService.CloneAndRemap(itemTree);
+            var root = clonedTree[0];
+            var assortItemId = root.Id;
+
             _assortIdToListingId[assortItemId] = listing.Id!;
 
-            var item = new Item
-            {
-                Id = assortItemId,
-                Template = listing.RootTpl,
-                ParentId = "hideout",
-                SlotId = "hideout",
-                Upd = new Upd
-                {
-                    StackObjectsCount = 1,
-                    BuyRestrictionMax = 1,
-                    BuyRestrictionCurrent = 0
-                }
-            };
+            root.Upd ??= new Upd { StackObjectsCount = 1 };
+            root.Upd.BuyRestrictionMax = 1;
+            root.Upd.BuyRestrictionCurrent = 0;
 
-            assort.Items.Add(item);
+            assort.Items.AddRange(clonedTree);
             assort.BarterScheme[assortItemId] =
             [
                 [new BarterScheme { Template = Money.ROUBLES, Count = listing.MarketPrice }]
