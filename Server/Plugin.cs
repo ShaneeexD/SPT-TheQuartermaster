@@ -71,6 +71,7 @@ public class QuartermasterPlugin(
                 inventoryHelper,
                 paymentService,
                 questHelper,
+                traderService,
                 sellPatchLogger
             );
             BuyPatch.SetDependencies(purchaseService, buyPatchLogger);

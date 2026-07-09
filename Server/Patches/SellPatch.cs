@@ -13,6 +13,7 @@ using SPTarkov.Server.Core.Models.Eft.Trade;
 using SPTarkov.Server.Core.Models.Eft.ItemEvent;
 using SPTarkov.Server.Core.Models.Utils;
 using TheQuartermaster.Server.Services;
+using TqmServices = TheQuartermaster.Server.Services;
 
 namespace TheQuartermaster.Server.Patches;
 
@@ -26,6 +27,7 @@ public class SellPatch : AbstractPatch
     private static InventoryHelper? _inventoryHelper;
     private static PaymentService? _paymentService;
     private static QuestHelper? _questHelper;
+    private static TqmServices.TraderService? _traderService;
     private static ISptLogger<SellPatch>? _logger;
 
     public static void SetDependencies(
@@ -36,6 +38,7 @@ public class SellPatch : AbstractPatch
         InventoryHelper inventoryHelper,
         PaymentService paymentService,
         QuestHelper questHelper,
+        TqmServices.TraderService traderService,
         ISptLogger<SellPatch> logger
     )
     {
@@ -46,6 +49,7 @@ public class SellPatch : AbstractPatch
         _inventoryHelper = inventoryHelper;
         _paymentService = paymentService;
         _questHelper = questHelper;
+        _traderService = traderService;
         _logger = logger;
     }
 
@@ -149,6 +153,12 @@ public class SellPatch : AbstractPatch
             _logger?.Info($"[TheQuartermaster] Uploaded {uploaded} listing(s) from player {sessionID}.");
 
             _paymentService?.GiveProfileMoney(profileToReceiveMoney, sellRequest.Price, sellRequest, output, sessionID);
+
+            if (uploaded > 0 && _configService?.Config.UploadConsent == true)
+            {
+                _logger?.Info("[TheQuartermaster] Refreshing trader assort after sale.");
+                _traderService?.RefreshAssort().GetAwaiter().GetResult();
+            }
 
             return false; // Skip original SellItem
         }
