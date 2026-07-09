@@ -1,11 +1,37 @@
 # The Quartermaster
 
-A global, player-driven marketplace trader for SPTarkov. Sell gear from your stash to The Quartermaster and browse live listings posted by other players. The marketplace is backed by a shared Firebase Firestore database, so the same assortment is available across every server and profile using the mod.
+A global, player-driven second-hand marketplace for SPTarkov.
+
+Sell gear from your stash. Buy gear that other players have sold. Every item has a history.
+
+## A Living Marketplace
+
+One of the most interesting parts of Fence in live Escape from Tarkov is that his inventory is influenced by what players sell.
+
+SPT can't naturally recreate that shared economy.
+
+Until now.
+
+**The Quartermaster brings a true player-driven second-hand marketplace to SPT.**
+
+Rather than generating random stock, The Quartermaster buys equipment that real players have sold and makes it available to everyone else running the mod.
+
+Every item you see has a history.
+
+Someone found it.
+
+Someone used it.
+
+Someone decided to sell it.
+
+Now it's available for you.
+
+When it's gone, it's gone.
 
 ## Features
 
 - **Global listings** – Items you sell are uploaded to a shared Firestore database and appear for everyone running the mod.
-- **Dynamic pricing** – Listings are priced at handbook value plus a configurable markup, with durability and quality taken into account.
+- **Dynamic pricing** – Assortment items are priced at handbook value plus a configurable markup, with durability and quality taken into account.
 - **Server-side only** – No client mod or prepatcher required.
 
 ## Requirements
