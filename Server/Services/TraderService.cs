@@ -28,9 +28,30 @@ public class TraderService(
 )
 {
     private readonly TraderConfig _traderConfig = configServer.GetConfig<TraderConfig>();
-    private readonly Dictionary<MongoId, string> _assortIdToListingId = new();
+    private readonly Dictionary<MongoId, AssortStackInfo> _assortIdToStackInfo = new();
     private readonly List<QuartermasterListing> _activeListings = [];
     private Trader? _trader;
+
+    private sealed class ProcessedListing
+    {
+        public QuartermasterListing? Listing { get; set; }
+        public List<Item> ItemTree { get; set; } = [];
+        public Item? Root { get; set; }
+        public int Quantity { get; set; }
+        public bool IsStackable { get; set; }
+    }
+
+    public sealed class AssortStackInfo
+    {
+        public double BuyRestrictionMax { get; set; }
+        public List<AssortListingAllocation> Allocations { get; set; } = [];
+    }
+
+    public sealed class AssortListingAllocation
+    {
+        public string ListingId { get; set; } = string.Empty;
+        public int Quantity { get; set; }
+    }
 
     public async Task RegisterTrader(string modPath)
     {
@@ -50,7 +71,7 @@ public class TraderService(
         try
         {
             _activeListings.Clear();
-            _assortIdToListingId.Clear();
+            _assortIdToStackInfo.Clear();
 
             if (firestoreService.IsEnabled)
             {
@@ -80,8 +101,24 @@ public class TraderService(
 
     public string? GetListingIdForAssortItem(MongoId assortItemId)
     {
-        _assortIdToListingId.TryGetValue(assortItemId, out var listingId);
-        return listingId;
+        _assortIdToStackInfo.TryGetValue(assortItemId, out var info);
+        return info?.Allocations.FirstOrDefault()?.ListingId;
+    }
+
+    public AssortStackInfo? GetStackInfoForAssortItem(MongoId assortItemId)
+    {
+        _assortIdToStackInfo.TryGetValue(assortItemId, out var info);
+        return info;
+    }
+
+    public List<AssortListingAllocation>? GetAllocationsForAssortItem(MongoId assortItemId)
+    {
+        return GetStackInfoForAssortItem(assortItemId)?.Allocations;
+    }
+
+    public double? GetBuyRestrictionMaxForAssortItem(MongoId assortItemId)
+    {
+        return GetStackInfoForAssortItem(assortItemId)?.BuyRestrictionMax;
     }
 
     public QuartermasterListing? GetListing(string? listingId)
@@ -222,7 +259,7 @@ public class TraderService(
         }
 
         _activeListings.Clear();
-        _assortIdToListingId.Clear();
+        _assortIdToStackInfo.Clear();
 
         if (firestoreService.IsEnabled)
         {
@@ -248,6 +285,7 @@ public class TraderService(
             LoyalLevelItems = new Dictionary<MongoId, int>()
         };
 
+        var processed = new List<ProcessedListing>();
         foreach (var listing in _activeListings)
         {
             if (string.IsNullOrWhiteSpace(listing.RootTpl) || !itemHelper.IsItemInDb(new MongoId(listing.RootTpl)))
@@ -263,25 +301,123 @@ public class TraderService(
                 continue;
             }
 
-            var clonedTree = itemCloneService.CloneAndRemap(itemTree);
-            var root = clonedTree[0];
-            var assortItemId = root.Id;
+            var root = itemTree[0];
+            var quantity = (int)(root.Upd?.StackObjectsCount ?? 1);
+            var isStackable = itemTree.Count == 1 && IsItemStackable(root.Template.ToString());
 
-            _assortIdToListingId[assortItemId] = listing.Id!;
+            processed.Add(new ProcessedListing
+            {
+                Listing = listing,
+                ItemTree = itemTree,
+                Root = root,
+                Quantity = quantity,
+                IsStackable = isStackable
+            });
+        }
 
-            root.Upd ??= new Upd { StackObjectsCount = 1 };
-            root.Upd.BuyRestrictionMax = 1;
-            root.Upd.BuyRestrictionCurrent = 0;
+        var stackableGroups = processed
+            .Where(p => p.IsStackable)
+            .GroupBy(p => p.Listing!.RootTpl)
+            .ToList();
 
-            assort.Items.AddRange(clonedTree);
-            assort.BarterScheme[assortItemId] =
-            [
-                [new BarterScheme { Template = Money.ROUBLES, Count = listing.MarketPrice }]
-            ];
-            assort.LoyalLevelItems[assortItemId] = 1;
+        foreach (var group in stackableGroups)
+        {
+            var chunk = new List<ProcessedListing>();
+            var chunkCount = 0;
+            foreach (var entry in group)
+            {
+                if (chunk.Count > 0 && chunkCount + entry.Quantity > QuartermasterConstants.Marketplace.MaxAssortStackSize)
+                {
+                    AddMergedStack(assort, chunk, chunkCount);
+                    chunk.Clear();
+                    chunkCount = 0;
+                }
+
+                chunk.Add(entry);
+                chunkCount += entry.Quantity;
+            }
+
+            if (chunk.Count > 0)
+            {
+                AddMergedStack(assort, chunk, chunkCount);
+            }
+        }
+
+        foreach (var entry in processed.Where(p => !p.IsStackable))
+        {
+            AddSingleItem(assort, entry);
         }
 
         return assort;
+    }
+
+    private bool IsItemStackable(string? tpl)
+    {
+        if (string.IsNullOrWhiteSpace(tpl))
+        {
+            return false;
+        }
+
+        var template = itemHelper.GetItem(new MongoId(tpl)).Value;
+        return template?.Properties?.StackMaxSize > 1;
+    }
+
+    private void AddMergedStack(TraderAssort assort, List<ProcessedListing> listings, int totalQuantity)
+    {
+        var representative = listings[0];
+        var clonedTree = itemCloneService.CloneAndRemap(representative.ItemTree);
+        var root = clonedTree[0];
+        var assortItemId = root.Id;
+
+        _assortIdToStackInfo[assortItemId] = new AssortStackInfo
+        {
+            BuyRestrictionMax = totalQuantity,
+            Allocations = listings
+                .Select(l => new AssortListingAllocation { ListingId = l.Listing!.Id!, Quantity = l.Quantity })
+                .ToList()
+        };
+
+        root.Upd ??= new Upd();
+        root.Upd.StackObjectsCount = totalQuantity;
+        root.Upd.BuyRestrictionMax = totalQuantity;
+        root.Upd.BuyRestrictionCurrent = 0;
+
+        assort.Items.AddRange(clonedTree);
+        assort.BarterScheme[assortItemId] =
+        [
+            [new BarterScheme { Template = Money.ROUBLES, Count = representative.Listing!.MarketPrice }]
+        ];
+        assort.LoyalLevelItems[assortItemId] = 1;
+
+        logger.Info($"[TheQuartermaster] Merged {listings.Count} listings of {representative.Listing!.RootTpl} into stack of {totalQuantity}.");
+    }
+
+    private void AddSingleItem(TraderAssort assort, ProcessedListing entry)
+    {
+        var clonedTree = itemCloneService.CloneAndRemap(entry.ItemTree);
+        var root = clonedTree[0];
+        var assortItemId = root.Id;
+
+        _assortIdToStackInfo[assortItemId] = new AssortStackInfo
+        {
+            BuyRestrictionMax = entry.Quantity,
+            Allocations =
+            [
+                new AssortListingAllocation { ListingId = entry.Listing!.Id!, Quantity = entry.Quantity }
+            ]
+        };
+
+        root.Upd ??= new Upd();
+        root.Upd.StackObjectsCount = entry.Quantity;
+        root.Upd.BuyRestrictionMax = entry.Quantity;
+        root.Upd.BuyRestrictionCurrent = 0;
+
+        assort.Items.AddRange(clonedTree);
+        assort.BarterScheme[assortItemId] =
+        [
+            [new BarterScheme { Template = Money.ROUBLES, Count = entry.Listing!.MarketPrice }]
+        ];
+        assort.LoyalLevelItems[assortItemId] = 1;
     }
 
     private void AddTraderLocales(TraderBase traderBase)

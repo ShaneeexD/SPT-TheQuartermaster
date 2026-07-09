@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Google.Cloud.Firestore;
 using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.Models.Utils;
@@ -271,6 +272,107 @@ public class FirestoreService(
         {
             logger.Error($"[TheQuartermaster] Failed to cleanup expired listings: {ex.Message}", ex);
         }
+    }
+
+    public async Task<int> TryPurchaseListingQuantityAsync(string listingId, string buyerProfileId, int quantity)
+    {
+        if (_db is null || string.IsNullOrWhiteSpace(listingId) || quantity <= 0)
+        {
+            return 0;
+        }
+
+        var docRef = _db.Collection(QuartermasterConstants.FirestoreCollections.Listings).Document(listingId);
+        var buyerHash = HashProfileId(buyerProfileId);
+
+        try
+        {
+            var result = await _db.RunTransactionAsync(async transaction =>
+            {
+                var snapshot = await transaction.GetSnapshotAsync(docRef);
+                if (!snapshot.Exists)
+                {
+                    return 0;
+                }
+
+                var listing = snapshot.ConvertTo<QuartermasterListing>();
+                listing.Id = snapshot.Id;
+
+                if (listing.Status != ListingStatus.Active)
+                {
+                    return 0;
+                }
+
+                if (listing.ExpiresAt is not null && listing.ExpiresAt.Value.ToDateTime() < DateTime.UtcNow)
+                {
+                    return 0;
+                }
+
+                var available = GetListingQuantity(listing.ItemTreeJson);
+                if (available <= 0)
+                {
+                    return 0;
+                }
+
+                var toTake = Math.Min(quantity, available);
+                var remaining = available - toTake;
+
+                if (remaining == 0)
+                {
+                    listing.Status = ListingStatus.Sold;
+                    listing.BuyerHash = buyerHash;
+                    listing.SoldAt = Timestamp.GetCurrentTimestamp();
+                }
+                else
+                {
+                    listing.ItemTreeJson = UpdateListingQuantity(listing.ItemTreeJson, remaining);
+                }
+
+                transaction.Set(docRef, listing);
+                return toTake;
+            });
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Failed to purchase quantity from listing {listingId}: {ex.Message}", ex);
+            return 0;
+        }
+    }
+
+    private static int GetListingQuantity(string? itemTreeJson)
+    {
+        if (string.IsNullOrWhiteSpace(itemTreeJson))
+        {
+            return 1;
+        }
+
+        var node = JsonNode.Parse(itemTreeJson);
+        if (node is not JsonArray arr || arr.Count == 0)
+        {
+            return 1;
+        }
+
+        var stackCount = arr[0]?["upd"]?.AsObject()["StackObjectsCount"]?.GetValue<double?>();
+        return stackCount.HasValue ? (int)stackCount.Value : 1;
+    }
+
+    private static string? UpdateListingQuantity(string? itemTreeJson, int remaining)
+    {
+        if (string.IsNullOrWhiteSpace(itemTreeJson))
+        {
+            return itemTreeJson;
+        }
+
+        var node = JsonNode.Parse(itemTreeJson);
+        if (node is not JsonArray arr || arr.Count == 0)
+        {
+            return itemTreeJson;
+        }
+
+        var upd = arr[0]!["upd"] ??= new JsonObject();
+        upd["StackObjectsCount"] = remaining;
+        return node.ToJsonString();
     }
 
     private string HashProfileId(string profileId)

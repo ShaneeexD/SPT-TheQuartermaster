@@ -6,6 +6,7 @@ using SPTarkov.Server.Core.Models.Eft.Inventory;
 using SPTarkov.Server.Core.Models.Eft.ItemEvent;
 using SPTarkov.Server.Core.Models.Eft.Trade;
 using SPTarkov.Server.Core.Models.Enums;
+using SPTarkov.Server.Core.Models.Eft.Profile;
 using SPTarkov.Server.Core.Models.Utils;
 using SPTarkov.Server.Core.Helpers;
 using SPTarkov.Server.Core.Services;
@@ -22,8 +23,11 @@ public class PurchaseService(
     FirestoreService firestoreService,
     ItemCompatibilityService itemCompatibilityService,
     ItemCloneService itemCloneService,
+    ItemHelper itemHelper,
     PaymentService paymentService,
     InventoryHelper inventoryHelper,
+    ProfileHelper profileHelper,
+    TimeUtil timeUtil,
     HttpResponseUtil httpResponseUtil
 )
 {
@@ -45,8 +49,9 @@ public class PurchaseService(
             return false;
         }
 
-        var listingId = traderService.GetListingIdForAssortItem(buyRequestData.ItemId);
-        if (string.IsNullOrWhiteSpace(listingId))
+        var itemId = buyRequestData.ItemId;
+        var stackInfo = traderService.GetStackInfoForAssortItem(itemId);
+        if (stackInfo is null || stackInfo.Allocations.Count == 0)
         {
             httpResponseUtil.AppendErrorToOutput(
                 output,
@@ -56,10 +61,17 @@ public class PurchaseService(
             return false;
         }
 
+        var count = buyRequestData.Count.GetValueOrDefault();
+        if (count <= 0)
+        {
+            count = 1;
+        }
+
         try
         {
-            var listing = await firestoreService.GetListingAsync(listingId);
-            if (listing is null || listing.Status != ListingStatus.Active || listing.ExpiresAt?.ToDateTime() < DateTime.UtcNow)
+            var firstAllocation = stackInfo.Allocations[0];
+            var representativeListing = await firestoreService.GetListingAsync(firstAllocation.ListingId);
+            if (representativeListing is null || representativeListing.Status != ListingStatus.Active || representativeListing.ExpiresAt?.ToDateTime() < DateTime.UtcNow)
             {
                 httpResponseUtil.AppendErrorToOutput(
                     output,
@@ -69,7 +81,7 @@ public class PurchaseService(
                 return false;
             }
 
-            if (!itemCompatibilityService.IsListingCompatibleForBuyer(listing, pmcData))
+            if (!itemCompatibilityService.IsListingCompatibleForBuyer(representativeListing, pmcData))
             {
                 httpResponseUtil.AppendErrorToOutput(
                     output,
@@ -79,7 +91,7 @@ public class PurchaseService(
                 return false;
             }
 
-            var itemTree = itemCloneService.DeserializeItemTree(listing.ItemTreeJson);
+            var itemTree = itemCloneService.DeserializeItemTree(representativeListing.ItemTreeJson);
             if (itemTree is null || itemTree.Count == 0)
             {
                 httpResponseUtil.AppendErrorToOutput(
@@ -90,19 +102,73 @@ public class PurchaseService(
                 return false;
             }
 
-            var clonedTree = itemCloneService.CloneAndRemap(itemTree);
+            var root = itemTree[0];
+            var isStackable = IsItemStackable(root.Template.ToString());
+            if (!isStackable && count > 1)
+            {
+                httpResponseUtil.AppendErrorToOutput(
+                    output,
+                    "[TheQuartermaster] Cannot purchase multiple non-stackable items at once.",
+                    BackendErrorCodes.UnknownTradingError
+                );
+                return false;
+            }
 
-            // Pay for the item
+            var totalAvailable = stackInfo.Allocations.Sum(a => a.Quantity);
+            if (count > totalAvailable)
+            {
+                httpResponseUtil.AppendErrorToOutput(
+                    output,
+                    "[TheQuartermaster] Not enough stock available.",
+                    BackendErrorCodes.OfferOutOfStock
+                );
+                return false;
+            }
+
+            // Pay for the requested quantity (client has already computed the total price)
             paymentService.PayMoney(pmcData, buyRequestData, sessionID, output);
             if (output.Warnings?.Count > 0)
             {
                 return false;
             }
 
-            // Deliver item to buyer
+            // Reserve/consume the stock from the underlying listings
+            var remainingToConsume = count;
+            foreach (var allocation in stackInfo.Allocations)
+            {
+                if (remainingToConsume <= 0)
+                {
+                    break;
+                }
+
+                var consumed = await firestoreService.TryPurchaseListingQuantityAsync(allocation.ListingId, sessionID.ToString(), remainingToConsume);
+                if (consumed <= 0)
+                {
+                    break;
+                }
+
+                remainingToConsume -= consumed;
+            }
+
+            if (remainingToConsume > 0)
+            {
+                logger.Warning($"[TheQuartermaster] Player {sessionID} paid for {count} items but only {count - remainingToConsume} were available from stock.");
+                httpResponseUtil.AppendErrorToOutput(
+                    output,
+                    "[TheQuartermaster] Stock changed during purchase, please try again.",
+                    BackendErrorCodes.OfferOutOfStock
+                );
+                return false;
+            }
+
+            // Build the item(s) to deliver
+            var deliveredTree = isStackable
+                ? BuildStackableDeliveryTree(itemTree, count)
+                : itemCloneService.CloneAndRemap(itemTree);
+
             var addRequest = new AddItemsDirectRequest
             {
-                ItemsWithModsToAdd = [clonedTree],
+                ItemsWithModsToAdd = [deliveredTree],
                 FoundInRaid = foundInRaid,
                 Callback = null,
                 UseSortingTable = false
@@ -113,14 +179,10 @@ public class PurchaseService(
                 return false;
             }
 
-            // Only mark as sold after successful payment and delivery
-            var soldListing = await firestoreService.TryPurchaseListingAsync(listingId, sessionID.ToString());
-            if (soldListing is null)
-            {
-                logger.Warning($"[TheQuartermaster] Delivered listing {listingId} but failed to mark it as sold in Firestore.");
-            }
+            // Track this purchase against the player's per-restock limit
+            TrackPurchase(sessionID, QuartermasterConstants.TraderId, itemId, count);
 
-            logger.Info($"[TheQuartermaster] Player {sessionID} purchased listing {listing.Id} for {listing.MarketPrice} RUB.");
+            logger.Info($"[TheQuartermaster] Player {sessionID} purchased {count} of {representativeListing.RootTpl}.");
             return true;
         }
         catch (Exception ex)
@@ -133,6 +195,51 @@ public class PurchaseService(
             );
             return false;
         }
+    }
+
+    private bool IsItemStackable(string? tpl)
+    {
+        if (string.IsNullOrWhiteSpace(tpl))
+        {
+            return false;
+        }
+
+        var template = itemHelper.GetItem(new MongoId(tpl)).Value;
+        return template?.Properties?.StackMaxSize > 1;
+    }
+
+    private List<Item> BuildStackableDeliveryTree(List<Item> sourceTree, int count)
+    {
+        var deliveredTree = itemCloneService.CloneAndRemap(sourceTree);
+        var root = deliveredTree[0];
+        root.Upd ??= new Upd();
+        root.Upd.StackObjectsCount = count;
+        return deliveredTree;
+    }
+
+    private void TrackPurchase(MongoId sessionID, MongoId traderId, MongoId itemId, int count)
+    {
+        var profile = profileHelper.GetFullProfile(sessionID);
+        if (profile is null)
+        {
+            return;
+        }
+
+        profile.TraderPurchases ??= new Dictionary<MongoId, Dictionary<MongoId, TraderPurchaseData>?>();
+        if (!profile.TraderPurchases.TryGetValue(traderId, out var traderPurchases) || traderPurchases is null)
+        {
+            traderPurchases = new Dictionary<MongoId, TraderPurchaseData>();
+            profile.TraderPurchases[traderId] = traderPurchases;
+        }
+
+        if (!traderPurchases.TryGetValue(itemId, out var data) || data is null)
+        {
+            data = new TraderPurchaseData();
+            traderPurchases[itemId] = data;
+        }
+
+        data.PurchaseCount = (data.PurchaseCount ?? 0) + count;
+        data.PurchaseTimestamp = timeUtil.GetTimeStamp();
     }
 
 }
