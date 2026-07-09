@@ -64,6 +64,7 @@ public class QuartermasterPlugin(
             configService.Load(_modPath);
             vanillaAllowlistService.Load(_modPath);
             await firestoreService.InitialiseAsync();
+            await firestoreService.DeleteExpiredListingsAsync();
             await backendConfigService.RefreshAsync();
             await traderService.RegisterTrader(_modPath);
 

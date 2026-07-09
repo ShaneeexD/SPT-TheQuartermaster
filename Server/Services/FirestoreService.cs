@@ -274,6 +274,56 @@ public class FirestoreService(
         }
     }
 
+    public async Task DeleteExpiredListingsAsync()
+    {
+        if (!IsEnabled || _db is null)
+        {
+            return;
+        }
+
+        const int batchSize = 500;
+        var totalDeleted = 0;
+
+        try
+        {
+            while (true)
+            {
+                var snapshot = await _db.Collection(QuartermasterConstants.FirestoreCollections.Listings)
+                    .WhereEqualTo("status", ListingStatus.Expired)
+                    .Limit(batchSize)
+                    .GetSnapshotAsync();
+
+                if (snapshot.Count == 0)
+                {
+                    break;
+                }
+
+                var batch = _db.StartBatch();
+                foreach (var doc in snapshot.Documents)
+                {
+                    batch.Delete(doc.Reference);
+                }
+
+                await batch.CommitAsync();
+                totalDeleted += snapshot.Count;
+
+                if (snapshot.Count < batchSize)
+                {
+                    break;
+                }
+            }
+
+            if (totalDeleted > 0)
+            {
+                logger.Info($"[TheQuartermaster] Deleted {totalDeleted} expired listing documents from Firestore.");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Failed to delete expired listings: {ex.Message}", ex);
+        }
+    }
+
     public async Task<int> TryPurchaseListingQuantityAsync(string listingId, string buyerProfileId, int quantity)
     {
         if (_db is null || string.IsNullOrWhiteSpace(listingId) || quantity <= 0)
