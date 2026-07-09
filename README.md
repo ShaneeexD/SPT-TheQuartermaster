@@ -34,6 +34,18 @@ When it's gone, it's gone.
 - **Dynamic pricing** – Assortment items are priced at handbook value plus a configurable markup, with durability and quality taken into account.
 - **Server-side only** – No client mod or prepatcher required.
 
+## Community Contracts
+
+The Quartermaster's work changes over time.
+
+Daily tasks, weekly contracts and limited-time operations can be delivered directly through the mod without requiring a new download.
+
+Everyone running The Quartermaster receives the same active contracts, creating a shared SPT experience while keeping the game fully single-player.
+
+Complete the job before it expires.
+
+Miss the window, and the opportunity is gone.
+
 ## Requirements
 
 - SPT-AKI 4.0.13
@@ -55,8 +67,10 @@ Edit `user/mods/TheQuartermaster/config/config.json` to change the mod's behavio
 |---|---|---|
 | `modEnabled` | `true` | Enable or disable the mod locally. |
 | `uploadConsent` | `true` | Allow your server to upload listings to the shared database. |
-| `baseMarkupPercent` | `15.0` | Markup applied to the base handbook price when listing items. |
-| `vanillaItemsOnly` | `false` | When `true`, only vanilla items can be listed or shown. |
+| `allowCommunityContracts` | `true` | Show community-submitted contracts in your client. |
+| `allowAdminContracts` | `true` | Show admin-created contracts in your client. |
+
+All global settings (markup percentage, vanilla-items-only, the community contracts toggle, contract tuning, and scheduling caps) are controlled via the backend (`quartermaster_config/contract_config`) and are not exposed in this local config file.
 
 ## Notes & Limitations
 

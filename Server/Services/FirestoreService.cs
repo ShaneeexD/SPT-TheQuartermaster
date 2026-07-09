@@ -16,6 +16,7 @@ public class FirestoreService(
     private FirestoreDb? _db;
     private DateTime _lastExpiredCleanup = DateTime.MinValue;
     public bool IsEnabled { get; private set; }
+    public FirestoreDb? Db => _db;
 
     public async Task InitialiseAsync()
     {

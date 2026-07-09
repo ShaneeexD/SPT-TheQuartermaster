@@ -10,9 +10,10 @@ public record QuartermasterConfig
     [JsonPropertyName("uploadConsent")]
     public bool UploadConsent { get; set; } = true;
 
-    [JsonPropertyName("baseMarkupPercent")]
-    public double BaseMarkupPercent { get; set; } = 15.0;
+    // Community contracts (client-side display toggles only)
+    [JsonPropertyName("allowCommunityContracts")]
+    public bool AllowCommunityContracts { get; set; } = true;
 
-    [JsonPropertyName("vanillaItemsOnly")]
-    public bool VanillaItemsOnly { get; set; } = false;
+    [JsonPropertyName("allowAdminContracts")]
+    public bool AllowAdminContracts { get; set; } = true;
 }

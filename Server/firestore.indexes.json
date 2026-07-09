@@ -1,0 +1,37 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "quartermaster_listings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "expires_at", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "quartermaster_schedule",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "end_at", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "quartermaster_schedule",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "start_at", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "quartermaster_player_progress",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "schedule_entry_id", "order": "ASCENDING" },
+        { "fieldPath": "profile_id_hash", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

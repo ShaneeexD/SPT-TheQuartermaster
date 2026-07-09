@@ -8,6 +8,7 @@ using SPTarkov.Server.Core.Models.Utils;
 using SPTarkov.Server.Core.Helpers;
 using SPTarkov.Server.Core.Services;
 using TheQuartermaster.Server.Models;
+using TheQuartermaster.Server.Services.Contracts;
 
 namespace TheQuartermaster.Server.Services;
 
@@ -15,6 +16,7 @@ namespace TheQuartermaster.Server.Services;
 public class ListingService(
     ISptLogger<ListingService> logger,
     ConfigService configService,
+    BackendConfigService backendConfigService,
     VanillaAllowlistService vanillaAllowlistService,
     ItemCompatibilityService itemCompatibilityService,
     ItemCloneService itemCloneService,
@@ -104,7 +106,7 @@ public class ListingService(
 
     public double CalculateMarketPrice(double basePrice, double qualityMultiplier)
     {
-        var markup = 1.0 + (configService.Config.BaseMarkupPercent / 100.0);
+        var markup = 1.0 + (backendConfigService.Config.BaseMarkupPercent / 100.0);
         var price = basePrice * qualityMultiplier * markup;
         return Math.Round(price);
     }

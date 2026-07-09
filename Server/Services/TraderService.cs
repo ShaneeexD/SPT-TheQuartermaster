@@ -10,6 +10,7 @@ using SPTarkov.Server.Core.Services;
 using SPTarkov.Server.Core.Routers;
 using SPTarkov.Server.Core.Servers;
 using TheQuartermaster.Server.Models;
+using TheQuartermaster.Server.Services.Contracts;
 
 namespace TheQuartermaster.Server.Services;
 
@@ -17,6 +18,7 @@ namespace TheQuartermaster.Server.Services;
 public class TraderService(
     ISptLogger<TraderService> logger,
     ConfigService configService,
+    BackendConfigService backendConfigService,
     FirestoreService firestoreService,
     ItemHelper itemHelper,
     DatabaseService databaseService,
@@ -53,7 +55,7 @@ public class TraderService(
             if (firestoreService.IsEnabled)
             {
                 var listings = await firestoreService.GetActiveListingsAsync();
-                _activeListings.AddRange(listings.Where(l => !configService.Config.VanillaItemsOnly || l.IsVanilla));
+                _activeListings.AddRange(listings.Where(l => !backendConfigService.Config.VanillaItemsOnly || l.IsVanilla));
                 logger.Info($"[TheQuartermaster] Loaded {_activeListings.Count} active listings from Firestore.");
             }
 
@@ -226,7 +228,7 @@ public class TraderService(
         {
             await firestoreService.CleanupExpiredListingsAsync();
             var listings = await firestoreService.GetActiveListingsAsync();
-            _activeListings.AddRange(listings.Where(l => !configService.Config.VanillaItemsOnly || l.IsVanilla));
+            _activeListings.AddRange(listings.Where(l => !backendConfigService.Config.VanillaItemsOnly || l.IsVanilla));
             logger.Info($"[TheQuartermaster] Refreshed {_activeListings.Count} active listings from Firestore.");
         }
 

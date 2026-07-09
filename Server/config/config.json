@@ -1,6 +1,6 @@
 {
   "modEnabled": true,
   "uploadConsent": true,
-  "baseMarkupPercent": 15.0,
-  "vanillaItemsOnly": false
+  "allowCommunityContracts": true,
+  "allowAdminContracts": true
 }

@@ -7,6 +7,7 @@ using SPTarkov.Server.Core.Services;
 using SPTarkov.Reflection.Patching;
 using TheQuartermaster.Server.Patches;
 using TheQuartermaster.Server.Services;
+using TheQuartermaster.Server.Services.Contracts;
 using Version = SemanticVersioning.Version;
 using Range = SemanticVersioning.Range;
 
@@ -45,7 +46,9 @@ public class QuartermasterPlugin(
     QuestHelper questHelper,
     SellPatch sellPatch,
     BuyPatch buyPatch,
-    TraderRefreshPatch traderRefreshPatch
+    TraderRefreshPatch traderRefreshPatch,
+    BackendConfigService backendConfigService,
+    CommunityContractService communityContractService
 ) : IOnLoad
 {
     private static string _modPath = string.Empty;
@@ -61,7 +64,10 @@ public class QuartermasterPlugin(
             configService.Load(_modPath);
             vanillaAllowlistService.Load(_modPath);
             await firestoreService.InitialiseAsync();
+            await backendConfigService.RefreshAsync();
             await traderService.RegisterTrader(_modPath);
+
+            await communityContractService.RefreshAsync();
 
             SellPatch.SetDependencies(
                 configService,
@@ -75,7 +81,7 @@ public class QuartermasterPlugin(
                 sellPatchLogger
             );
             BuyPatch.SetDependencies(purchaseService, buyPatchLogger);
-            TraderRefreshPatch.SetDependencies(traderService);
+            TraderRefreshPatch.SetDependencies(traderService, communityContractService);
 
             sellPatch.Enable();
             buyPatch.Enable();

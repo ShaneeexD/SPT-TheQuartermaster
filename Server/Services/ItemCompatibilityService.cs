@@ -5,13 +5,14 @@ using SPTarkov.Server.Core.Models.Eft.Common.Tables;
 using SPTarkov.Server.Core.Models.Utils;
 using SPTarkov.Server.Core.Helpers;
 using TheQuartermaster.Server.Models;
+using TheQuartermaster.Server.Services.Contracts;
 
 namespace TheQuartermaster.Server.Services;
 
 [Injectable(InjectionType.Singleton)]
 public class ItemCompatibilityService(
     ISptLogger<ItemCompatibilityService> logger,
-    ConfigService configService,
+    BackendConfigService backendConfigService,
     VanillaAllowlistService vanillaAllowlistService,
     ItemHelper itemHelper
 )
@@ -32,7 +33,7 @@ public class ItemCompatibilityService(
 
         var templates = itemTree.Select(i => i.Template).ToList();
 
-        if (configService.Config.VanillaItemsOnly && !vanillaAllowlistService.AllVanilla(templates))
+        if (backendConfigService.Config.VanillaItemsOnly && !vanillaAllowlistService.AllVanilla(templates))
         {
             logger.Warning("[TheQuartermaster] Vanilla-only mode is enabled and listing contains non-vanilla templates.");
             return false;
@@ -71,7 +72,7 @@ public class ItemCompatibilityService(
             return false;
         }
 
-        if (configService.Config.VanillaItemsOnly && !listing.IsVanilla)
+        if (backendConfigService.Config.VanillaItemsOnly && !listing.IsVanilla)
         {
             return false;
         }
