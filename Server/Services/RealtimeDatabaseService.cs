@@ -198,6 +198,21 @@ public class RealtimeDatabaseService(
                 return (_cachedListings.ToList(), false);
             }
 
+            if (!_cacheInitialized && !string.IsNullOrWhiteSpace(remoteVersion))
+            {
+                var localCache = await TryLoadLocalCacheAsync();
+                if (localCache is not null && localCache.Version == remoteVersion)
+                {
+                    var cachedListings = localCache.Listings
+                        .Select(l => ToQuartermasterListing(l, null, l.Id ?? string.Empty))
+                        .ToList();
+                    _cachedListings = cachedListings;
+                    _cachedVersion = remoteVersion;
+                    _cacheInitialized = true;
+                    return (cachedListings, false);
+                }
+            }
+
             var listings = await LoadActiveListingsFromRtdbAsync();
             _cachedListings = listings;
             _cachedVersion = remoteVersion;
@@ -1112,20 +1127,39 @@ public class RealtimeDatabaseService(
         }
     }
 
-    private async Task<List<QuartermasterListing>> LoadCatalogueCache()
+    private async Task<RtdbCatalogueCache?> TryLoadLocalCacheAsync()
     {
-        var result = new List<QuartermasterListing>();
         try
         {
             var path = Path.Combine(configService.ModPath, "cache", "catalogue.json");
             if (!File.Exists(path))
             {
-                return result;
+                return null;
             }
 
             var json = await File.ReadAllTextAsync(path);
             var cache = JsonSerializer.Deserialize<RtdbCatalogueCache>(json, _jsonOptions);
             if (cache?.Listings is null || cache.Listings.Count == 0)
+            {
+                return null;
+            }
+
+            return cache;
+        }
+        catch (Exception ex)
+        {
+            logger.Debug($"[TheQuartermaster] Failed to load local catalogue cache: {ex.Message}");
+            return null;
+        }
+    }
+
+    private async Task<List<QuartermasterListing>> LoadCatalogueCache()
+    {
+        var result = new List<QuartermasterListing>();
+        try
+        {
+            var cache = await TryLoadLocalCacheAsync();
+            if (cache is null)
             {
                 return result;
             }
