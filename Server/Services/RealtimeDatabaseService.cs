@@ -643,19 +643,20 @@ public class RealtimeDatabaseService(
         try
         {
             var (listings, refreshed) = await RefreshActiveListingsIfNeededAsync();
-            var version = _cachedVersion;
+            var meta = await GetCatalogueMetaAsync();
+            var version = meta?.Version ?? _cachedVersion;
             if (string.IsNullOrWhiteSpace(version))
             {
                 version = GenerateCatalogueVersion();
-                _cachedVersion = version;
             }
 
-            if (!refreshed)
+            if (meta is not null && !refreshed)
             {
                 logger.Info($"[TheQuartermaster] Catalogue version {version} unchanged; no rebuild needed.");
                 return;
             }
 
+            _cachedVersion = version;
             var generatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var pageCount = (int)Math.Ceiling(listings.Count / (double)CataloguePageSize);
             if (pageCount == 0)
@@ -682,7 +683,7 @@ public class RealtimeDatabaseService(
                 await PutJsonAsync($"catalogue/versions/{version}/pages/{page.PageId}", page);
             }
 
-            var meta = new RtdbCatalogueMeta
+            var newMeta = new RtdbCatalogueMeta
             {
                 Version = version,
                 GeneratedAt = generatedAt,
@@ -690,7 +691,7 @@ public class RealtimeDatabaseService(
                 ListingCount = listings.Count
             };
 
-            await PutJsonAsync("meta/catalogue", meta);
+            await PutJsonAsync("meta/catalogue", newMeta);
             await SaveCatalogueCache(listings, version);
             logger.Info($"[TheQuartermaster] Rebuilt catalogue version {version} with {listings.Count} listings across {pageCount} pages.");
         }
