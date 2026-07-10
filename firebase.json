@@ -4,6 +4,6 @@
     "indexes": "Server/firestore.indexes.json"
   },
   "database": {
-    "rules": "Server/rtdb.rules"
+    "rules": "Server/database.rules.json"
   }
 }
