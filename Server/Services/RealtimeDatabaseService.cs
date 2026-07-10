@@ -177,11 +177,11 @@ public class RealtimeDatabaseService(
             }
             else if (!wasInitialized)
             {
-                logger.Info($"[TheQuartermaster] Catalogue version {versionText} unchanged; using local cache.");
+                logger.Info($"[TheQuartermaster] Catalogue version {versionText} unchanged; using {listings.Count} local cache listings.");
             }
             else
             {
-                logger.Debug($"[TheQuartermaster] Catalogue version {versionText} unchanged; using local cache.");
+                logger.Debug($"[TheQuartermaster] Catalogue version {versionText} unchanged; using {listings.Count} local cache listings.");
             }
             return listings;
         }
