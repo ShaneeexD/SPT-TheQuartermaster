@@ -9,7 +9,9 @@ public static class ContractStatus
     public const string Active = "active";
     public const string Expired = "expired";
     public const string Rejected = "rejected";
+    public const string AdminBlocked = "admin_blocked";
     public const string AdminFeatured = "admin_featured";
+    public const string Invalid = "invalid";
 
     public static readonly HashSet<string> VoteEligible =
     [
@@ -26,5 +28,14 @@ public static class ContractStatus
     [
         Active,
         Scheduled
+    ];
+
+    public static readonly HashSet<string> FinalStates =
+    [
+        Approved,
+        Rejected,
+        Expired,
+        AdminBlocked,
+        Invalid
     ];
 }

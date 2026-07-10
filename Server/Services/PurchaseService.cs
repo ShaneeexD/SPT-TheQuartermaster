@@ -20,7 +20,7 @@ public class PurchaseService(
     ISptLogger<PurchaseService> logger,
     ConfigService configService,
     TraderService traderService,
-    FirestoreService firestoreService,
+    MarketplaceService marketplaceService,
     ItemCompatibilityService itemCompatibilityService,
     ItemCloneService itemCloneService,
     ItemHelper itemHelper,
@@ -70,7 +70,7 @@ public class PurchaseService(
         try
         {
             var firstAllocation = stackInfo.Allocations[0];
-            var representativeListing = await firestoreService.GetListingAsync(firstAllocation.ListingId);
+            var representativeListing = await marketplaceService.GetListingAsync(firstAllocation.ListingId);
             if (representativeListing is null || representativeListing.Status != ListingStatus.Active || representativeListing.ExpiresAt?.ToDateTime() < DateTime.UtcNow)
             {
                 httpResponseUtil.AppendErrorToOutput(
@@ -125,14 +125,10 @@ public class PurchaseService(
                 return false;
             }
 
-            // Pay for the requested quantity (client has already computed the total price)
-            paymentService.PayMoney(pmcData, buyRequestData, sessionID, output);
-            if (output.Warnings?.Count > 0)
-            {
-                return false;
-            }
+            var idempotencyKey = $"{sessionID}_{buyRequestData.ItemId}_{buyRequestData.Count}_{timeUtil.GetTimeStamp()}";
 
-            // Reserve/consume the stock from the underlying listings
+            // Reserve the stock before taking payment so a payment failure never charges for unavailable stock.
+            var reservedAllocations = new List<(string ListingId, int Quantity)>();
             var remainingToConsume = count;
             foreach (var allocation in stackInfo.Allocations)
             {
@@ -141,23 +137,40 @@ public class PurchaseService(
                     break;
                 }
 
-                var consumed = await firestoreService.TryPurchaseListingQuantityAsync(allocation.ListingId, sessionID.ToString(), remainingToConsume);
+                var consumed = await marketplaceService.TryPurchaseListingQuantityAsync(allocation.ListingId, sessionID.ToString(), remainingToConsume, idempotencyKey);
                 if (consumed <= 0)
                 {
                     break;
                 }
 
+                reservedAllocations.Add((allocation.ListingId, consumed));
                 remainingToConsume -= consumed;
             }
 
             if (remainingToConsume > 0)
             {
-                logger.Warning($"[TheQuartermaster] Player {sessionID} paid for {count} items but only {count - remainingToConsume} were available from stock.");
+                foreach (var (listingId, _) in reservedAllocations)
+                {
+                    await marketplaceService.ReleaseListingQuantityAsync(listingId, idempotencyKey);
+                }
+
                 httpResponseUtil.AppendErrorToOutput(
                     output,
                     "[TheQuartermaster] Stock changed during purchase, please try again.",
                     BackendErrorCodes.OfferOutOfStock
                 );
+                return false;
+            }
+
+            // Pay for the requested quantity (client has already computed the total price)
+            paymentService.PayMoney(pmcData, buyRequestData, sessionID, output);
+            if (output.Warnings?.Count > 0)
+            {
+                foreach (var (listingId, _) in reservedAllocations)
+                {
+                    await marketplaceService.ReleaseListingQuantityAsync(listingId, idempotencyKey);
+                }
+
                 return false;
             }
 
@@ -177,6 +190,11 @@ public class PurchaseService(
             if (output.Warnings?.Count > 0)
             {
                 return false;
+            }
+
+            foreach (var (listingId, _) in reservedAllocations)
+            {
+                await marketplaceService.CompleteListingPurchaseAsync(listingId, idempotencyKey);
             }
 
             // Track this purchase against the player's per-restock limit

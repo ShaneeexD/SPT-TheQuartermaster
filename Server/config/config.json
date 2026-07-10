@@ -1,6 +1,3 @@
 {
-  "modEnabled": true,
-  "uploadConsent": true,
-  "allowCommunityContracts": true,
-  "allowAdminContracts": true
+  "modEnabled": true
 }

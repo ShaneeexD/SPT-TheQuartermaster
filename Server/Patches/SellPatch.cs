@@ -11,8 +11,11 @@ using SPTarkov.Server.Core.Models.Eft.Common;
 using SPTarkov.Server.Core.Models.Eft.Common.Tables;
 using SPTarkov.Server.Core.Models.Eft.Trade;
 using SPTarkov.Server.Core.Models.Eft.ItemEvent;
+using SPTarkov.Server.Core.Models.Enums;
 using SPTarkov.Server.Core.Models.Utils;
+using SPTarkov.Server.Core.Utils;
 using TheQuartermaster.Server.Services;
+using TheQuartermaster.Server.Services.Contracts;
 using TqmServices = TheQuartermaster.Server.Services;
 
 namespace TheQuartermaster.Server.Patches;
@@ -21,36 +24,42 @@ namespace TheQuartermaster.Server.Patches;
 public class SellPatch : AbstractPatch
 {
     private static ConfigService? _configService;
+    private static BackendConfigService? _backendConfigService;
     private static ListingService? _listingService;
     private static ItemCloneService? _itemCloneService;
-    private static FirestoreService? _firestoreService;
+    private static MarketplaceService? _marketplaceService;
     private static InventoryHelper? _inventoryHelper;
     private static PaymentService? _paymentService;
     private static QuestHelper? _questHelper;
     private static TqmServices.TraderService? _traderService;
     private static ISptLogger<SellPatch>? _logger;
+    private static HttpResponseUtil? _httpResponseUtil;
 
     public static void SetDependencies(
         ConfigService configService,
+        BackendConfigService backendConfigService,
         ListingService listingService,
         ItemCloneService itemCloneService,
-        FirestoreService firestoreService,
+        MarketplaceService marketplaceService,
         InventoryHelper inventoryHelper,
         PaymentService paymentService,
         QuestHelper questHelper,
         TqmServices.TraderService traderService,
-        ISptLogger<SellPatch> logger
+        ISptLogger<SellPatch> logger,
+        HttpResponseUtil httpResponseUtil
     )
     {
         _configService = configService;
+        _backendConfigService = backendConfigService;
         _listingService = listingService;
         _itemCloneService = itemCloneService;
-        _firestoreService = firestoreService;
+        _marketplaceService = marketplaceService;
         _inventoryHelper = inventoryHelper;
         _paymentService = paymentService;
         _questHelper = questHelper;
         _traderService = traderService;
         _logger = logger;
+        _httpResponseUtil = httpResponseUtil;
     }
 
     protected override MethodBase GetTargetMethod()
@@ -77,10 +86,26 @@ public class SellPatch : AbstractPatch
             return true;
         }
 
-        _questHelper?.IncrementSoldToTraderCounters(profileWithItemsToSell, profileToReceiveMoney, sellRequest);
-
         try
         {
+            if (_marketplaceService?.IsEnabled == true && _backendConfigService is not null)
+            {
+                var activeCount = _marketplaceService.GetActiveListingCountAsync().GetAwaiter().GetResult();
+                var cap = _backendConfigService.Config.MaxActiveListings;
+                if (activeCount >= cap)
+                {
+                    _logger?.Warning($"[TheQuartermaster] Global active listing cap reached ({activeCount}/{cap}); blocking sale.");
+                    _httpResponseUtil?.AppendErrorToOutput(
+                        output,
+                        "[TheQuartermaster] The global marketplace is full. Try again later.",
+                        BackendErrorCodes.OfferOutOfStock
+                    );
+                    return false;
+                }
+            }
+
+            _questHelper?.IncrementSoldToTraderCounters(profileWithItemsToSell, profileToReceiveMoney, sellRequest);
+
             const string pattern = @"\s+";
             var uploaded = 0;
 
@@ -126,13 +151,13 @@ public class SellPatch : AbstractPatch
 
                 if (_configService?.Config.UploadConsent == true)
                 {
-                    if (_firestoreService?.IsEnabled != true)
+                    if (_marketplaceService?.IsEnabled != true)
                     {
-                        _logger?.Warning("[TheQuartermaster] Firestore is not enabled, cannot upload listing.");
+                        _logger?.Warning("[TheQuartermaster] Marketplace backend is not enabled, cannot upload listing.");
                         continue;
                     }
 
-                    var uploadedListing = _firestoreService.UploadListingAsync(listing).GetAwaiter().GetResult();
+                    var uploadedListing = _marketplaceService.UploadListingAsync(listing).GetAwaiter().GetResult();
                     if (uploadedListing is null)
                     {
                         _logger?.Error($"[TheQuartermaster] Failed to upload listing for item {itemIdToFind}.");
@@ -153,12 +178,6 @@ public class SellPatch : AbstractPatch
             _logger?.Info($"[TheQuartermaster] Uploaded {uploaded} listing(s) from player {sessionID}.");
 
             _paymentService?.GiveProfileMoney(profileToReceiveMoney, sellRequest.Price, sellRequest, output, sessionID);
-
-            if (uploaded > 0 && _configService?.Config.UploadConsent == true)
-            {
-                _logger?.Info("[TheQuartermaster] Refreshing trader assort after sale.");
-                _traderService?.RefreshAssort().GetAwaiter().GetResult();
-            }
 
             return false; // Skip original SellItem
         }

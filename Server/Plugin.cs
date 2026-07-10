@@ -4,6 +4,7 @@ using SPTarkov.Server.Core.Models.Spt.Mod;
 using SPTarkov.Server.Core.Models.Utils;
 using SPTarkov.Server.Core.Helpers;
 using SPTarkov.Server.Core.Services;
+using SPTarkov.Server.Core.Utils;
 using SPTarkov.Reflection.Patching;
 using TheQuartermaster.Server.Patches;
 using TheQuartermaster.Server.Services;
@@ -39,6 +40,8 @@ public class QuartermasterPlugin(
     FirestoreService firestoreService,
     ListingService listingService,
     ItemCloneService itemCloneService,
+    MarketplaceService marketplaceService,
+    MarketplaceWorkerService marketplaceWorkerService,
     PurchaseService purchaseService,
     InventoryHelper inventoryHelper,
     TraderService traderService,
@@ -48,7 +51,8 @@ public class QuartermasterPlugin(
     BuyPatch buyPatch,
     TraderRefreshPatch traderRefreshPatch,
     BackendConfigService backendConfigService,
-    CommunityContractService communityContractService
+    CommunityContractService communityContractService,
+    HttpResponseUtil httpResponseUtil
 ) : IOnLoad
 {
     private static string _modPath = string.Empty;
@@ -64,22 +68,26 @@ public class QuartermasterPlugin(
             configService.Load(_modPath);
             vanillaAllowlistService.Load(_modPath);
             await firestoreService.InitialiseAsync();
-            await firestoreService.DeleteExpiredListingsAsync();
-            await backendConfigService.RefreshAsync();
+            await marketplaceService.InitialiseAsync();
+            await backendConfigService.LoadAsync();
             await traderService.RegisterTrader(_modPath);
 
             await communityContractService.RefreshAsync();
+            communityContractService.Start();
+            marketplaceWorkerService.Start();
 
             SellPatch.SetDependencies(
                 configService,
+                backendConfigService,
                 listingService,
                 itemCloneService,
-                firestoreService,
+                marketplaceService,
                 inventoryHelper,
                 paymentService,
                 questHelper,
                 traderService,
-                sellPatchLogger
+                sellPatchLogger,
+                httpResponseUtil
             );
             BuyPatch.SetDependencies(purchaseService, buyPatchLogger);
             TraderRefreshPatch.SetDependencies(traderService, communityContractService);

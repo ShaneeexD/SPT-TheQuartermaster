@@ -15,7 +15,6 @@ public class ContractVotingService(
 {
     public async Task ProcessPendingSubmissionsAsync()
     {
-        await backendConfigService.RefreshAsync();
         if (!backendConfigService.Config.CommunityContractsEnabled || !firestoreContractService.IsEnabled)
         {
             return;
@@ -79,19 +78,11 @@ public class ContractVotingService(
             return;
         }
 
-        var votes = await firestoreContractService.GetVotesForContractAsync(submission.Id!);
-        var upvotes = votes.Count(v => v.IsUpvote);
-        var downvotes = votes.Count(v => !v.IsUpvote);
-        var totalVotes = upvotes + downvotes;
-
-        submission.Upvotes = upvotes;
-        submission.Downvotes = downvotes;
-        submission.ApprovalRatio = totalVotes > 0 ? (double)upvotes / totalVotes * 100.0 : 0.0;
-
+        var totalVotes = submission.Upvotes + submission.Downvotes;
         var minVotes = backendConfigService.Config.MinimumVotes;
         var approvalPct = backendConfigService.Config.ApprovalPercentage;
 
-        if (totalVotes >= minVotes && submission.ApprovalRatio >= approvalPct)
+        if (submission.Upvotes + submission.Downvotes >= minVotes && submission.ApprovalRatio >= approvalPct)
         {
             var definition = await firestoreContractService.CreateDefinitionFromSubmissionAsync(submission);
             if (definition is not null)

@@ -96,5 +96,32 @@ $RECYCLE.BIN/
 *~
 .directory
 firestore.rules
+firestore.indexes.json
 firebase-adminsdk.json
+firebase.json
+.firebaserc
 Server/Build
+/tools
+/tools/seed-contract
+package-lock.json
+rtdb.rules
+
+# Build artifacts / logs
+*.binlog
+*.log
+/TheQuartermaster.Server.dll
+/TheQuartermaster.Server.pdb
+
+SECURITY.md
+TASK.md
+
+# Secrets / environment-specific configs
+Server/config/firebase-adminsdk.json
+Server/config/config.json
+Server/database.rules.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/

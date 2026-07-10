@@ -18,6 +18,14 @@ public class QuartermasterListing
     [JsonPropertyName("buyer_hash")]
     public string? BuyerHash { get; set; }
 
+    [FirestoreProperty("buyer_uid")]
+    [JsonPropertyName("buyer_uid")]
+    public string? BuyerUid { get; set; }
+
+    [FirestoreProperty("seller_uid")]
+    [JsonPropertyName("seller_uid")]
+    public string? SellerUid { get; set; }
+
     [FirestoreProperty("root_tpl")]
     [JsonPropertyName("root_tpl")]
     public string? RootTpl { get; set; }
@@ -77,6 +85,22 @@ public class QuartermasterListing
     [FirestoreProperty("listing_metadata")]
     [JsonPropertyName("listing_metadata")]
     public Dictionary<string, string> Metadata { get; set; } = new();
+
+    [FirestoreProperty("last_purchase_id")]
+    [JsonPropertyName("last_purchase_id")]
+    public string? LastPurchaseId { get; set; }
+
+    [FirestoreProperty("last_purchase_quantity")]
+    [JsonPropertyName("last_purchase_quantity")]
+    public int LastPurchaseQuantity { get; set; }
+
+    [FirestoreProperty("last_purchase_status")]
+    [JsonPropertyName("last_purchase_status")]
+    public string? LastPurchaseStatus { get; set; }
+
+    [FirestoreProperty("last_purchase_expires_at")]
+    [JsonPropertyName("last_purchase_expires_at")]
+    public Timestamp? LastPurchaseExpiresAt { get; set; }
 }
 
 public static class ListingStatus

@@ -22,6 +22,10 @@ public class ContractScheduleEntry
     [JsonPropertyName("contract_definition_id")]
     public string ContractDefinitionId { get; set; } = string.Empty;
 
+    [FirestoreProperty("template_id")]
+    [JsonPropertyName("template_id")]
+    public string TemplateId { get; set; } = string.Empty;
+
     [FirestoreProperty("status")]
     [JsonPropertyName("status")]
     public string Status { get; set; } = ContractStatus.Scheduled;
@@ -29,6 +33,10 @@ public class ContractScheduleEntry
     [FirestoreProperty("recurrence_type")]
     [JsonPropertyName("recurrence_type")]
     public string RecurrenceType { get; set; } = ContractRecurrenceType.OneTime;
+
+    [FirestoreProperty("activation_source")]
+    [JsonPropertyName("activation_source")]
+    public string ActivationSource { get; set; } = "automatic";
 
     [FirestoreProperty("start_at")]
     [JsonPropertyName("start_at")]
@@ -46,6 +54,10 @@ public class ContractScheduleEntry
     [JsonPropertyName("expires_at")]
     public Timestamp? ExpiresAt { get; set; }
 
+    [FirestoreProperty("expired_at")]
+    [JsonPropertyName("expired_at")]
+    public Timestamp? ExpiredAt { get; set; }
+
     [FirestoreProperty("admin_created")]
     [JsonPropertyName("admin_created")]
     public bool AdminCreated { get; set; }
@@ -53,6 +65,10 @@ public class ContractScheduleEntry
     [FirestoreProperty("created_at")]
     [JsonPropertyName("created_at")]
     public Timestamp? CreatedAt { get; set; }
+
+    [FirestoreProperty("updated_at")]
+    [JsonPropertyName("updated_at")]
+    public Timestamp? UpdatedAt { get; set; }
 
     [FirestoreProperty("quest_id")]
     [JsonPropertyName("quest_id")]

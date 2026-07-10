@@ -7,13 +7,37 @@ public record QuartermasterConfig
     [JsonPropertyName("modEnabled")]
     public bool ModEnabled { get; set; } = true;
 
-    [JsonPropertyName("uploadConsent")]
+    [JsonIgnore]
     public bool UploadConsent { get; set; } = true;
 
     // Community contracts (client-side display toggles only)
-    [JsonPropertyName("allowCommunityContracts")]
+    [JsonIgnore]
     public bool AllowCommunityContracts { get; set; } = true;
 
-    [JsonPropertyName("allowAdminContracts")]
+    [JsonIgnore]
     public bool AllowAdminContracts { get; set; } = true;
+
+    // Distributed worker
+    [JsonIgnore]
+    public bool EnableDistributedWorker { get; set; } = true;
+
+    [JsonIgnore]
+    public int WorkerIntervalMinutes { get; set; } = 5;
+
+    // Marketplace storage backend ("firestore" or "realtimeDatabase")
+    [JsonIgnore]
+    public string MarketplaceStorage { get; set; } = "realtimeDatabase";
+
+    // Firebase public client configuration (no service account in public builds)
+    [JsonIgnore]
+    public string FirebaseProjectId { get; set; } = "spt-the-quartermaster";
+
+    [JsonIgnore]
+    public string FirebaseApiKey { get; set; } = "AIzaSyCv5bx6N4ew-nm0BNFyF3cE-TjGTH6PMSw";
+
+    [JsonIgnore]
+    public string FirebaseAuthDomain { get; set; } = "spt-the-quartermaster.firebaseapp.com";
+
+    [JsonIgnore]
+    public string FirebaseDatabaseUrl { get; set; } = "https://spt-the-quartermaster-default-rtdb.europe-west1.firebasedatabase.app/";
 }

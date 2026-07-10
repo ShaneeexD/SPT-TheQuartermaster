@@ -20,7 +20,7 @@
     <PackageReference Include="SPTarkov.Server.Core" Version="4.0.13" />
     <PackageReference Include="Google.Cloud.Firestore" Version="3.9.0" />
     <PackageReference Include="WTT-ServerCommonLib" Version="2.0.20" />
-    <PackageReference Include="ILRepack.FullAuto" Version="1.6.0" PrivateAssets="all" />
+    <PackageReference Include="ILRepack" Version="2.0.33" PrivateAssets="all" />
   </ItemGroup>
 
   <!-- Copy mod data to output -->
@@ -28,28 +28,87 @@
     <None Include="db\**\*" CopyToOutputDirectory="PreserveNewest" />
     <None Include="config\config.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="package.json" CopyToOutputDirectory="PreserveNewest" />
-    <EmbeddedResource Include="config\firebase-adminsdk.json" />
+    <None Include="config\firebase-adminsdk.json" CopyToOutputDirectory="Never" />
   </ItemGroup>
 
   <PropertyGroup>
-    <ILRepackBuildEnable>true</ILRepackBuildEnable>
-    <ILRepackTargetConfigurations>Debug;Release</ILRepackTargetConfigurations>
-    <ILRepackUnionTypes>true</ILRepackUnionTypes>
-    <ILRepackPerformInternalize>false</ILRepackPerformInternalize>
-    <ILRepackAllowDuplicateResources>true</ILRepackAllowDuplicateResources>
     <ILRepackExcludeAssemblies>$(OutputPath)SPTarkov.Server.Core.dll;$(OutputPath)SPTarkov.Common.dll;$(OutputPath)SPTarkov.DI.dll;$(OutputPath)SPTarkov.Reflection.dll;$(OutputPath)SPTarkov.Server.Assets.dll;$(OutputPath)SPTarkov.Server.Web.dll;$(OutputPath)SPT.Server.dll;$(OutputPath)SPT.Server.Linux.dll;$(OutputPath)0Harmony.dll;$(OutputPath)FastCloner.dll;$(OutputPath)JetBrains.Annotations.dll;$(OutputPath)MudBlazor.dll;$(OutputPath)SemanticVersioning.dll;$(OutputPath)Mono.Cecil.dll;$(OutputPath)Mono.Cecil.Mdb.dll;$(OutputPath)Mono.Cecil.Pdb.dll;$(OutputPath)Mono.Cecil.Rocks.dll;$(OutputPath)MonoMod.Backports.dll;$(OutputPath)MonoMod.Core.dll;$(OutputPath)MonoMod.Iced.dll;$(OutputPath)MonoMod.ILHelpers.dll;$(OutputPath)MonoMod.RuntimeDetour.dll;$(OutputPath)MonoMod.Utils.dll;$(OutputPath)Microsoft.AspNetCore.Authorization.dll;$(OutputPath)Microsoft.AspNetCore.Components.dll;$(OutputPath)Microsoft.AspNetCore.Components.Forms.dll;$(OutputPath)Microsoft.AspNetCore.Components.Web.dll;$(OutputPath)Microsoft.AspNetCore.Metadata.dll;$(OutputPath)Microsoft.Extensions.Configuration.dll;$(OutputPath)Microsoft.Extensions.Configuration.Abstractions.dll;$(OutputPath)Microsoft.Extensions.Configuration.Binder.dll;$(OutputPath)Microsoft.Extensions.DependencyInjection.dll;$(OutputPath)Microsoft.Extensions.DependencyInjection.Abstractions.dll;$(OutputPath)Microsoft.Extensions.Diagnostics.dll;$(OutputPath)Microsoft.Extensions.Diagnostics.Abstractions.dll;$(OutputPath)Microsoft.Extensions.Http.dll;$(OutputPath)Microsoft.Extensions.Localization.dll;$(OutputPath)Microsoft.Extensions.Localization.Abstractions.dll;$(OutputPath)Microsoft.Extensions.Logging.dll;$(OutputPath)Microsoft.Extensions.Logging.Abstractions.dll;$(OutputPath)Microsoft.Extensions.Options.dll;$(OutputPath)Microsoft.Extensions.Options.ConfigurationExtensions.dll;$(OutputPath)Microsoft.Extensions.Primitives.dll;$(OutputPath)Microsoft.JSInterop.dll;$(OutputPath)System.IO.Hashing.dll;$(OutputPath)WTT-ServerCommonLib.dll</ILRepackExcludeAssemblies>
   </PropertyGroup>
+  <UsingTask TaskName="GetRepackLibDirs" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <References ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <LibOptions Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Text" />
+      <Using Namespace="System.Collections.Generic" />
+      <Using Namespace="Microsoft.Build.Framework" />
+      <Code Type="Fragment" Language="cs">
+<![CDATA[
+        var dirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var sb = new StringBuilder();
+        foreach (ITaskItem item in References)
+        {
+            if (!string.IsNullOrEmpty(item.ItemSpec))
+            {
+                string dir = Path.GetDirectoryName(Path.GetFullPath(item.ItemSpec));
+                if (dirs.Add(dir))
+                {
+                    sb.Append(" --lib:\"");
+                    sb.Append(dir);
+                    sb.Append("\"");
+                }
+            }
+        }
+        LibOptions = sb.ToString();
+]]>
+      </Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="CustomILRepack" BeforeTargets="CopyFilesToOutputDirectory">
+    <ItemGroup>
+      <_RepackRefs Include="$(OutputPath)*.dll" Exclude="$(OutputPath)$(TargetName)$(TargetExt);$(ILRepackExcludeAssemblies)" />
+    </ItemGroup>
+    <GetRepackLibDirs References="@(ReferencePath)">
+      <Output TaskParameter="LibOptions" PropertyName="_RepackLibOptions" />
+    </GetRepackLibDirs>
+    <Exec WorkingDirectory="$([System.IO.Path]::GetDirectoryName('$(ILRepack)'))" Command="&quot;$(ILRepack)&quot; --allowdup --allowduplicateresources --noRepackRes --ndebug $(_RepackLibOptions) --out:@(IntermediateAssembly->'&quot;%(FullPath)&quot;') @(IntermediateAssembly->'&quot;%(FullPath)&quot;') @(_RepackRefs->'&quot;%(FullPath)&quot;',' ')" />
+    <Delete Files="@(_RepackRefs)" />
+  </Target>
+
 
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">
     <RemoveDir Directories="$(ProjectDir)Build\SPT\user\mods\TheQuartermaster" />
     <MakeDir Directories="$(ProjectDir)Build\SPT\user\mods\TheQuartermaster" />
     <ItemGroup>
-      <DbFiles Include="$(ProjectDir)db\**\*" />
-      <ConfigFiles Include="$(ProjectDir)config\config.json" />
+      <!-- Copy all runtime DLLs the mod brings, but NOT assemblies already loaded by the SPT server -->
+      <OutputDlls Include="$(OutputPath)*.dll"
+                  Exclude="$(OutputPath)SPTarkov.*.dll;
+                           $(OutputPath)SPT.*.dll;
+                           $(OutputPath)Mono.*.dll;
+                           $(OutputPath)Mono.Cecil.*.dll;
+                           $(OutputPath)MonoMod.*.dll;
+                           $(OutputPath)0Harmony.dll;
+                           $(OutputPath)FastCloner.dll;
+                           $(OutputPath)JetBrains.Annotations.dll;
+                           $(OutputPath)MudBlazor.dll;
+                           $(OutputPath)SemanticVersioning.dll;
+                           $(OutputPath)Microsoft.*.dll;
+                           $(OutputPath)Newtonsoft.Json.dll" />
+      <OutputFiles Include="@(OutputDlls)" />
+      <OutputFiles Include="$(OutputPath)Microsoft.Bcl.AsyncInterfaces.dll" Condition="Exists('$(OutputPath)Microsoft.Bcl.AsyncInterfaces.dll')" />
+      <OutputFiles Include="$(OutputPath)TheQuartermaster.Server.deps.json" />
+      <OutputFiles Include="$(OutputPath)TheQuartermaster.Server.pdb" />
+      <OutputFiles Include="$(OutputPath)runtimes\**\*" />
+      <ConfigFiles Include="$(OutputPath)config\**\*" />
+      <DbFiles Include="$(OutputPath)db\**\*" />
     </ItemGroup>
-    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ProjectDir)Build\SPT\user\mods\TheQuartermaster" />
-    <Copy SourceFiles="$(ProjectDir)package.json" DestinationFolder="$(ProjectDir)Build\SPT\user\mods\TheQuartermaster" />
+    <Copy SourceFiles="@(OutputFiles)" DestinationFiles="@(OutputFiles->'$(ProjectDir)Build\SPT\user\mods\TheQuartermaster\%(RecursiveDir)%(Filename)%(Extension)')" />
+    <Copy SourceFiles="@(ConfigFiles)" DestinationFiles="@(ConfigFiles->'$(ProjectDir)Build\SPT\user\mods\TheQuartermaster\config\%(RecursiveDir)%(Filename)%(Extension)')" />
     <Copy SourceFiles="@(DbFiles)" DestinationFiles="@(DbFiles->'$(ProjectDir)Build\SPT\user\mods\TheQuartermaster\db\%(RecursiveDir)%(Filename)%(Extension)')" />
-    <Copy SourceFiles="@(ConfigFiles)" DestinationFiles="@(ConfigFiles->'$(ProjectDir)Build\SPT\user\mods\TheQuartermaster\config\%(Filename)%(Extension)')" />
+    <Copy SourceFiles="$(ProjectDir)package.json" DestinationFolder="$(ProjectDir)Build\SPT\user\mods\TheQuartermaster" />
   </Target>
 </Project>

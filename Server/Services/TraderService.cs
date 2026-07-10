@@ -19,7 +19,7 @@ public class TraderService(
     ISptLogger<TraderService> logger,
     ConfigService configService,
     BackendConfigService backendConfigService,
-    FirestoreService firestoreService,
+    MarketplaceService marketplaceService,
     ItemHelper itemHelper,
     DatabaseService databaseService,
     ConfigServer configServer,
@@ -73,11 +73,11 @@ public class TraderService(
             _activeListings.Clear();
             _assortIdToStackInfo.Clear();
 
-            if (firestoreService.IsEnabled)
+            if (marketplaceService.IsEnabled)
             {
-                var listings = await firestoreService.GetActiveListingsAsync();
+                var listings = await marketplaceService.GetActiveListingsAsync();
                 _activeListings.AddRange(listings.Where(l => !backendConfigService.Config.VanillaItemsOnly || l.IsVanilla));
-                logger.Info($"[TheQuartermaster] Loaded {_activeListings.Count} active listings from Firestore.");
+                logger.Info($"[TheQuartermaster] Loaded {_activeListings.Count} active listings from marketplace backend.");
             }
 
             var traderBase = BuildTraderBase(modPath);
@@ -261,12 +261,11 @@ public class TraderService(
         _activeListings.Clear();
         _assortIdToStackInfo.Clear();
 
-        if (firestoreService.IsEnabled)
+        if (marketplaceService.IsEnabled)
         {
-            await firestoreService.CleanupExpiredListingsAsync();
-            var listings = await firestoreService.GetActiveListingsAsync();
+            var listings = await marketplaceService.GetActiveListingsAsync();
             _activeListings.AddRange(listings.Where(l => !backendConfigService.Config.VanillaItemsOnly || l.IsVanilla));
-            logger.Info($"[TheQuartermaster] Refreshed {_activeListings.Count} active listings from Firestore.");
+            logger.Info($"[TheQuartermaster] Refreshed {_activeListings.Count} active listings from marketplace backend.");
         }
 
         var newAssort = BuildAssort();
@@ -461,7 +460,7 @@ public class TraderService(
         {
             Name = traderBase.Nickname!,
             TraderId = traderBase.Id,
-            Seconds = new MinMax<int>(1, 1)
+            Seconds = new MinMax<int>(300, 300)
         };
         _traderConfig.UpdateTime.Add(updateTime);
     }

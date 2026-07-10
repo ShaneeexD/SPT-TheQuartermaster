@@ -11,55 +11,103 @@ public class CommunityContractService(
     ConfigService configService,
     BackendConfigService backendConfigService,
     FirestoreContractService firestoreContractService,
-    ContractVotingService contractVotingService,
-    ContractScheduler contractScheduler,
     ContractInjectionService contractInjectionService
-)
+) : IDisposable
 {
+    private readonly SemaphoreSlim _semaphore = new(1, 1);
+    private Timer? _timer;
     private DateTime _lastRefresh = DateTime.MinValue;
-    private static readonly TimeSpan MinRefreshInterval = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan MinRefreshInterval = TimeSpan.FromMinutes(1);
 
-    public async Task RefreshAsync(bool force = false)
+    public void Start()
     {
-        if (!firestoreContractService.IsEnabled)
+        if (_timer is not null)
         {
-            logger.Warning("[TheQuartermaster] Community contracts disabled (Firestore not available).");
             return;
         }
 
+        var interval = TimeSpan.FromMinutes(configService.Config.WorkerIntervalMinutes);
+        if (interval <= TimeSpan.Zero)
+        {
+            interval = TimeSpan.FromMinutes(5);
+        }
+
+        logger.Info($"[TheQuartermaster] Starting community contract worker with interval {interval.TotalMinutes} minutes.");
+        _timer = new Timer(_ => _ = Task.Run(TickAsync), null, TimeSpan.Zero, interval);
+    }
+
+    public void Stop()
+    {
+        _timer?.Dispose();
+        _timer = null;
+        logger.Info("[TheQuartermaster] Stopped community contract worker.");
+    }
+
+    public void Dispose()
+    {
+        Stop();
+        _semaphore.Dispose();
+    }
+
+    public async Task RefreshAsync(bool force = false)
+    {
         var now = DateTime.UtcNow;
         if (!force && now - _lastRefresh < MinRefreshInterval)
         {
             return;
         }
 
-        _lastRefresh = now;
-        logger.Info("[TheQuartermaster] Refreshing community contracts...");
+        await TickAsync();
+    }
 
-        await backendConfigService.RefreshAsync();
-        if (!backendConfigService.Config.CommunityContractsEnabled)
+    public async Task TickAsync()
+    {
+        if (!await _semaphore.WaitAsync(0))
         {
+            logger.Warning("[TheQuartermaster] Community contract tick already running; skipping.");
             return;
         }
-        await contractVotingService.ProcessPendingSubmissionsAsync();
-        await contractScheduler.TickAsync();
 
-        var activeEntries = await firestoreContractService.GetActiveScheduleEntriesAsync();
-        var definitionIds = activeEntries.Select(e => e.ContractDefinitionId).Distinct().ToList();
+        try
+        {
+            _lastRefresh = DateTime.UtcNow;
+            logger.Info("[TheQuartermaster] Community contract tick started.");
 
-        var definitions = (await firestoreContractService.GetDefinitionsAsync(
-                ContractStatus.Approved,
-                ContractStatus.AdminFeatured,
-                ContractStatus.Active,
-                ContractStatus.Scheduled
-            ))
-            .Where(d => !string.IsNullOrWhiteSpace(d.Id) && definitionIds.Contains(d.Id))
-            .Where(d => configService.Config.AllowCommunityContracts || d.AdminCreated || d.AdminFeatured)
-            .Where(d => configService.Config.AllowAdminContracts || (!d.AdminCreated && !d.AdminFeatured))
-            .ToDictionary(d => d.Id!, StringComparer.OrdinalIgnoreCase);
+            if (!firestoreContractService.IsEnabled)
+            {
+                logger.Warning("[TheQuartermaster] Community contracts disabled (Firestore not available).");
+                return;
+            }
 
-        await contractInjectionService.InjectActiveContractsAsync(activeEntries, definitions);
+            if (!backendConfigService.Config.CommunityContractsEnabled)
+            {
+                logger.Info("[TheQuartermaster] Community contracts disabled by backend config.");
+                return;
+            }
 
-        logger.Info($"[TheQuartermaster] Community contracts refreshed. {activeEntries.Count} active schedule entr(y/ies).");
+            var activeEntries = await firestoreContractService.GetActiveScheduleEntriesAsync();
+            var definitionIds = activeEntries.Select(e => e.ContractDefinitionId).Distinct().ToList();
+
+            var definitions = (await firestoreContractService.GetDefinitionsAsync(
+                    ContractStatus.Approved,
+                    ContractStatus.AdminFeatured
+                ))
+                .Where(d => !string.IsNullOrWhiteSpace(d.Id) && definitionIds.Contains(d.Id))
+                .Where(d => configService.Config.AllowCommunityContracts || d.AdminCreated || d.AdminFeatured)
+                .Where(d => configService.Config.AllowAdminContracts || (!d.AdminCreated && !d.AdminFeatured))
+                .ToDictionary(d => d.Id!, StringComparer.OrdinalIgnoreCase);
+
+            await contractInjectionService.InjectActiveContractsAsync(activeEntries, definitions);
+
+            logger.Info($"[TheQuartermaster] Community contract tick complete. {activeEntries.Count} active schedule entr(y/ies).");
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Community contract tick failed: {ex.Message}", ex);
+        }
+        finally
+        {
+            _semaphore.Release();
+        }
     }
 }

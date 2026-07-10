@@ -16,6 +16,34 @@ public class FirestoreContractService(
 
     public bool IsEnabled => firestoreService.IsEnabled;
 
+    public async Task<List<ContractSubmission>> GetAllSubmissionsAsync()
+    {
+        var result = new List<ContractSubmission>();
+        if (Db is null)
+        {
+            return result;
+        }
+
+        try
+        {
+            var snapshot = await Db.Collection(QuartermasterConstants.FirestoreCollections.ContractSubmissions)
+                .GetSnapshotAsync();
+
+            foreach (var doc in snapshot.Documents)
+            {
+                var submission = doc.ConvertTo<ContractSubmission>();
+                submission.Id = doc.Id;
+                result.Add(submission);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Failed to fetch all contract submissions: {ex.Message}", ex);
+        }
+
+        return result;
+    }
+
     public async Task<List<ContractSubmission>> GetPendingSubmissionsAsync()
     {
         var result = new List<ContractSubmission>();
@@ -40,35 +68,6 @@ public class FirestoreContractService(
         catch (Exception ex)
         {
             logger.Error($"[TheQuartermaster] Failed to fetch contract submissions: {ex.Message}", ex);
-        }
-
-        return result;
-    }
-
-    public async Task<List<ContractVote>> GetVotesForContractAsync(string contractId)
-    {
-        var result = new List<ContractVote>();
-        if (Db is null || string.IsNullOrWhiteSpace(contractId))
-        {
-            return result;
-        }
-
-        try
-        {
-            var snapshot = await Db.Collection(QuartermasterConstants.FirestoreCollections.ContractVotes)
-                .WhereEqualTo("contract_id", contractId)
-                .GetSnapshotAsync();
-
-            foreach (var doc in snapshot.Documents)
-            {
-                var vote = doc.ConvertTo<ContractVote>();
-                vote.Id = doc.Id;
-                result.Add(vote);
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.Error($"[TheQuartermaster] Failed to fetch votes for {contractId}: {ex.Message}", ex);
         }
 
         return result;
@@ -103,14 +102,23 @@ public class FirestoreContractService(
 
         try
         {
+            var now = Timestamp.GetCurrentTimestamp();
+            var status = submission.AdminFeatured
+                ? ContractStatus.AdminFeatured
+                : ContractStatus.Approved;
+
             var definition = new ContractDefinition
             {
                 Title = submission.Title,
                 Description = submission.Description,
-                Status = submission.Status == ContractStatus.AdminFeatured ? ContractStatus.AdminFeatured : ContractStatus.Approved,
+                Status = status,
+                RecurrenceType = submission.RecurrenceType,
                 CreatedBy = submission.CreatedBy,
-                AdminCreated = false,
-                AdminFeatured = false,
+                AuthorUid = submission.AuthorUid,
+                Source = submission.AdminCreated ? "admin" : "community",
+                AdminCreated = submission.AdminCreated,
+                AdminFeatured = submission.AdminFeatured,
+                AdminBlocked = false,
                 SptVersion = submission.SptVersion,
                 Objectives = submission.Objectives,
                 Rewards = submission.Rewards,
@@ -119,6 +127,8 @@ public class FirestoreContractService(
                 ApprovalRatio = submission.ApprovalRatio,
                 CreatedAt = submission.SubmittedAt,
                 VotingEndsAt = submission.VotingEndsAt,
+                ApprovedAt = now,
+                RejectedAt = null,
                 Metadata = new Dictionary<string, string>
                 {
                     ["source_submission_id"] = submission.Id
@@ -133,6 +143,114 @@ public class FirestoreContractService(
         catch (Exception ex)
         {
             logger.Error($"[TheQuartermaster] Failed to create contract definition from submission {submission.Id}: {ex.Message}", ex);
+            return null;
+        }
+    }
+
+    public async Task<List<ContractDefinition>> GetApprovedTemplatesAsync()
+    {
+        var result = new List<ContractDefinition>();
+        if (Db is null)
+        {
+            return result;
+        }
+
+        try
+        {
+            var snapshot = await Db.Collection(QuartermasterConstants.FirestoreCollections.ContractDefinitions)
+                .WhereIn("status", new List<string> { ContractStatus.Approved, ContractStatus.AdminFeatured })
+                .WhereEqualTo("admin_blocked", false)
+                .GetSnapshotAsync();
+
+            foreach (var doc in snapshot.Documents)
+            {
+                var definition = doc.ConvertTo<ContractDefinition>();
+                definition.Id = doc.Id;
+                result.Add(definition);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Failed to fetch approved templates: {ex.Message}", ex);
+        }
+
+        return result;
+    }
+
+    public async Task<ContractScheduleEntry?> CreateScheduleEntryAsync(ContractScheduleEntry entry)
+    {
+        if (Db is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var docRef = string.IsNullOrWhiteSpace(entry.Id)
+                ? Db.Collection(QuartermasterConstants.FirestoreCollections.ContractSchedule).Document()
+                : Db.Collection(QuartermasterConstants.FirestoreCollections.ContractSchedule).Document(entry.Id);
+            entry.Id = docRef.Id;
+            await docRef.SetAsync(entry);
+            return entry;
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Failed to create schedule entry: {ex.Message}", ex);
+            return null;
+        }
+    }
+
+    public async Task<ContractScheduleEntry?> CreateScheduleEntryAtomicAsync(ContractScheduleEntry entry, ContractDefinition definition, string recurrenceType, int maxSlots)
+    {
+        if (Db is null || string.IsNullOrWhiteSpace(definition.Id) || string.IsNullOrWhiteSpace(entry.ContractDefinitionId))
+        {
+            return null;
+        }
+
+        try
+        {
+            var scheduleCollection = Db.Collection(QuartermasterConstants.FirestoreCollections.ContractSchedule);
+            var defRef = Db.Collection(QuartermasterConstants.FirestoreCollections.ContractDefinitions).Document(definition.Id);
+
+            var created = await Db.RunTransactionAsync(async transaction =>
+            {
+                var activeQuery = scheduleCollection
+                    .WhereEqualTo("status", ContractStatus.Active)
+                    .WhereEqualTo("recurrence_type", recurrenceType)
+                    .Count();
+                var activeSnapshot = await transaction.GetSnapshotAsync(activeQuery);
+                if ((activeSnapshot.Count ?? 0) >= maxSlots)
+                {
+                    return null;
+                }
+
+                var duplicateQuery = scheduleCollection
+                    .WhereEqualTo("status", ContractStatus.Active)
+                    .WhereEqualTo("contract_definition_id", entry.ContractDefinitionId)
+                    .Count();
+                var duplicateSnapshot = await transaction.GetSnapshotAsync(duplicateQuery);
+                if ((duplicateSnapshot.Count ?? 0) > 0)
+                {
+                    return null;
+                }
+
+                var docRef = scheduleCollection.Document();
+                entry.Id = docRef.Id;
+                transaction.Set(docRef, entry);
+
+                definition.LastUsedAt = entry.StartAt;
+                definition.ScheduledStartAt = entry.StartAt;
+                definition.ScheduledEndAt = entry.EndAt;
+                transaction.Set(defRef, definition, SetOptions.MergeAll);
+
+                return entry;
+            });
+
+            return created;
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Failed to atomically create schedule entry for {definition.Id}: {ex.Message}", ex);
             return null;
         }
     }
@@ -332,68 +450,5 @@ public class FirestoreContractService(
         }
 
         return result;
-    }
-
-    public async Task<ContractPlayerProgress?> GetPlayerProgressAsync(string scheduleEntryId, string profileIdHash)
-    {
-        if (Db is null || string.IsNullOrWhiteSpace(scheduleEntryId) || string.IsNullOrWhiteSpace(profileIdHash))
-        {
-            return null;
-        }
-
-        try
-        {
-            var snapshot = await Db.Collection(QuartermasterConstants.FirestoreCollections.ContractPlayerProgress)
-                .WhereEqualTo("schedule_entry_id", scheduleEntryId)
-                .WhereEqualTo("profile_id_hash", profileIdHash)
-                .Limit(1)
-                .GetSnapshotAsync();
-
-            if (snapshot.Count == 0)
-            {
-                return null;
-            }
-
-            var doc = snapshot.Documents.First();
-            var progress = doc.ConvertTo<ContractPlayerProgress>();
-            progress.Id = doc.Id;
-            return progress;
-        }
-        catch (Exception ex)
-        {
-            logger.Error($"[TheQuartermaster] Failed to fetch player progress for {scheduleEntryId}: {ex.Message}", ex);
-            return null;
-        }
-    }
-
-    public async Task<ContractPlayerProgress?> SetPlayerProgressAsync(ContractPlayerProgress progress)
-    {
-        if (Db is null)
-        {
-            return null;
-        }
-
-        try
-        {
-            var collection = Db.Collection(QuartermasterConstants.FirestoreCollections.ContractPlayerProgress);
-            DocumentReference docRef;
-            if (string.IsNullOrWhiteSpace(progress.Id))
-            {
-                docRef = collection.Document();
-                progress.Id = docRef.Id;
-            }
-            else
-            {
-                docRef = collection.Document(progress.Id);
-            }
-
-            await docRef.SetAsync(progress, SetOptions.MergeAll);
-            return progress;
-        }
-        catch (Exception ex)
-        {
-            logger.Error($"[TheQuartermaster] Failed to set player progress for {progress.ScheduleEntryId}: {ex.Message}", ex);
-            return null;
-        }
     }
 }

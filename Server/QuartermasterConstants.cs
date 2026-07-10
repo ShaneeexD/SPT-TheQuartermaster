@@ -49,7 +49,6 @@ public static class QuartermasterConstants
         public const string ContractSubmissions = "quartermaster_submissions";
         public const string ContractVotes = "quartermaster_votes";
         public const string ContractSchedule = "quartermaster_schedule";
-        public const string ContractPlayerProgress = "quartermaster_player_progress";
     }
 
     public static class FirestoreConfig

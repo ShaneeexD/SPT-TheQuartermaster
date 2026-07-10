@@ -69,15 +69,21 @@ Edit `user/mods/TheQuartermaster/config/config.json` to change the mod's behavio
 | `uploadConsent` | `true` | Allow your server to upload listings to the shared database. |
 | `allowCommunityContracts` | `true` | Show community-submitted contracts in your client. |
 | `allowAdminContracts` | `true` | Show admin-created contracts in your client. |
+| `enableDistributedWorker` | `true` | Enable the timer-driven community contract scheduler. |
+| `workerIntervalMinutes` | `5` | How often the contract scheduler runs. |
+| `firebaseProjectId` | `""` | The Mod's Firebase project ID (public client). |
+| `firebaseApiKey` | `""` | The Mod's Firebase public Web API key for anonymous auth. |
+| `firebaseAuthDomain` | `""` | The Mod's Firebase auth domain. |
 
-All global settings (markup percentage, vanilla-items-only, the community contracts toggle, contract tuning, and scheduling caps) are controlled via the backend (`quartermaster_config/contract_config`) and are not exposed in this local config file.
+### Backend Configuration
 
-## Notes & Limitations
+Additional runtime settings are stored in the `quartermaster_config/contract_config` Firestore document and can be edited from the **Settings** tab of the Quartermaster Admin Panel.
 
-- The mod checks your stash space before completing a purchase. If an item does not fit, the trade is cancelled and the listing remains available.
-- Incompatible items (e.g., modded templates missing from your local database) are filtered out of the buyer's view.
-- Currency, secure containers, and some special items are excluded from the marketplace.
-- A live internet connection is required; the mod cannot function offline.
+| Setting | Default | Description |
+|---|---|---|
+| `workshop_sync_enabled` | `true` | Pull community contracts from the website API into the mod database. |
+| `workshop_api_url` | `https://serenity-workshop.netlify.app/api/contract-list` | The website API endpoint to sync contracts from. |
+
 
 ## Credits
 

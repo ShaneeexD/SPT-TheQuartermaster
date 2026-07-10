@@ -1,7 +1,8 @@
-using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Google.Cloud.Firestore;
+using Google.Cloud.Firestore.V1;
+using Grpc.Core;
 using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.Models.Utils;
 using TheQuartermaster.Server.Models;
@@ -11,7 +12,8 @@ namespace TheQuartermaster.Server.Services;
 [Injectable(InjectionType.Singleton)]
 public class FirestoreService(
     ISptLogger<FirestoreService> logger,
-    ConfigService configService
+    ConfigService configService,
+    FirebaseAuthService firebaseAuthService
 )
 {
     private FirestoreDb? _db;
@@ -28,77 +30,34 @@ public class FirestoreService(
             return;
         }
 
-        var credentialsJson = GetEmbeddedCredentialsJson();
-        if (string.IsNullOrWhiteSpace(credentialsJson))
+        var projectId = configService.Config.FirebaseProjectId;
+        var apiKey = configService.Config.FirebaseApiKey;
+
+        if (string.IsNullOrWhiteSpace(projectId) || string.IsNullOrWhiteSpace(apiKey))
         {
             IsEnabled = false;
-            logger.Warning("[TheQuartermaster] Firestore credentials not embedded in assembly.");
-            return;
-        }
-
-        string? projectId;
-        try
-        {
-            using var doc = JsonDocument.Parse(credentialsJson);
-            if (!doc.RootElement.TryGetProperty("project_id", out var projectIdElement) || projectIdElement.ValueKind != JsonValueKind.String)
-            {
-                IsEnabled = false;
-                logger.Warning("[TheQuartermaster] Embedded Firestore credentials missing project_id.");
-                return;
-            }
-
-            projectId = projectIdElement.GetString();
-        }
-        catch (Exception ex)
-        {
-            IsEnabled = false;
-            logger.Error($"[TheQuartermaster] Failed to parse embedded Firestore credentials: {ex.Message}", ex);
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(projectId))
-        {
-            IsEnabled = false;
-            logger.Warning("[TheQuartermaster] Firestore project id is empty.");
+            logger.Error("[TheQuartermaster] Firestore public config missing project_id/api_key.");
             return;
         }
 
         try
         {
-            _db = await new FirestoreDbBuilder
+            await firebaseAuthService.InitialiseAsync();
+
+            var firestoreClient = await new FirestoreClientBuilder
             {
-                ProjectId = projectId,
-                JsonCredentials = credentialsJson
+                ChannelCredentials = ChannelCredentials.SecureSsl
             }.BuildAsync();
-            IsEnabled = true;
-            logger.Info($"[TheQuartermaster] Firestore initialised for project {projectId}.");
 
-            await CleanupExpiredListingsAsync();
+            _db = FirestoreDb.Create(projectId, firestoreClient);
+            IsEnabled = true;
+            logger.Info($"[TheQuartermaster] Firestore initialised for project {projectId} with no credentials (open rules).");
         }
         catch (Exception ex)
         {
             IsEnabled = false;
             logger.Error($"[TheQuartermaster] Firestore initialisation failed: {ex.Message}", ex);
         }
-    }
-
-    private static string? GetEmbeddedCredentialsJson()
-    {
-        var assembly = Assembly.GetExecutingAssembly();
-        var resourceName = assembly.GetManifestResourceNames().FirstOrDefault(n => n.EndsWith("firebase-adminsdk.json", StringComparison.OrdinalIgnoreCase));
-        if (resourceName is null)
-        {
-            return null;
-        }
-
-        using var stream = assembly.GetManifestResourceStream(resourceName);
-        if (stream is null)
-        {
-            return null;
-        }
-
-        using var reader = new StreamReader(stream);
-        return reader.ReadToEnd();
     }
 
     public async Task<QuartermasterListing?> UploadListingAsync(QuartermasterListing listing)
@@ -110,6 +69,7 @@ public class FirestoreService(
 
         try
         {
+            listing.SellerUid ??= firebaseAuthService.Uuid;
             var collection = _db.Collection(QuartermasterConstants.FirestoreCollections.Listings);
             var reference = await collection.AddAsync(listing);
             listing.Id = reference.Id;
@@ -154,6 +114,28 @@ public class FirestoreService(
         return result;
     }
 
+    public async Task<int> GetActiveListingCountAsync()
+    {
+        if (!IsEnabled || _db is null)
+        {
+            return 0;
+        }
+
+        try
+        {
+            var query = _db.Collection(QuartermasterConstants.FirestoreCollections.Listings)
+                .WhereEqualTo("status", ListingStatus.Active);
+
+            var snapshot = await query.Count().GetSnapshotAsync();
+            return (int)(snapshot.Count ?? 0);
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Failed to count active listings: {ex.Message}", ex);
+            return 0;
+        }
+    }
+
     public async Task<QuartermasterListing?> GetListingAsync(string listingId)
     {
         if (!IsEnabled || _db is null || string.IsNullOrWhiteSpace(listingId))
@@ -192,6 +174,7 @@ public class FirestoreService(
         {
             var docRef = _db.Collection(QuartermasterConstants.FirestoreCollections.Listings).Document(listingId);
             var buyerHash = HashProfileId(buyerProfileId);
+            var buyerUid = firebaseAuthService.Uuid ?? buyerHash;
 
             var result = await _db.RunTransactionAsync(async transaction =>
             {
@@ -216,6 +199,7 @@ public class FirestoreService(
 
                 listing.Status = ListingStatus.Sold;
                 listing.BuyerHash = buyerHash;
+                listing.BuyerUid = buyerUid;
                 listing.SoldAt = Timestamp.GetCurrentTimestamp();
 
                 transaction.Set(docRef, listing);
@@ -324,15 +308,16 @@ public class FirestoreService(
         }
     }
 
-    public async Task<int> TryPurchaseListingQuantityAsync(string listingId, string buyerProfileId, int quantity)
+    public async Task<int> TryPurchaseListingQuantityAsync(string listingId, string buyerProfileId, int quantity, string idempotencyKey)
     {
-        if (_db is null || string.IsNullOrWhiteSpace(listingId) || quantity <= 0)
+        if (_db is null || string.IsNullOrWhiteSpace(listingId) || quantity <= 0 || string.IsNullOrWhiteSpace(idempotencyKey))
         {
             return 0;
         }
 
         var docRef = _db.Collection(QuartermasterConstants.FirestoreCollections.Listings).Document(listingId);
         var buyerHash = HashProfileId(buyerProfileId);
+        var buyerUid = firebaseAuthService.Uuid ?? buyerHash;
 
         try
         {
@@ -357,6 +342,20 @@ public class FirestoreService(
                     return 0;
                 }
 
+                var now = DateTime.UtcNow;
+                if (string.Equals(listing.LastPurchaseId, idempotencyKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (string.Equals(listing.LastPurchaseStatus, "completed", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return 0;
+                    }
+
+                    if (listing.LastPurchaseExpiresAt.HasValue && listing.LastPurchaseExpiresAt.Value.ToDateTime() >= now)
+                    {
+                        return listing.LastPurchaseQuantity;
+                    }
+                }
+
                 var available = GetListingQuantity(listing.ItemTreeJson);
                 if (available <= 0)
                 {
@@ -370,12 +369,18 @@ public class FirestoreService(
                 {
                     listing.Status = ListingStatus.Sold;
                     listing.BuyerHash = buyerHash;
+                    listing.BuyerUid = buyerUid;
                     listing.SoldAt = Timestamp.GetCurrentTimestamp();
                 }
                 else
                 {
                     listing.ItemTreeJson = UpdateListingQuantity(listing.ItemTreeJson, remaining);
                 }
+
+                listing.LastPurchaseId = idempotencyKey;
+                listing.LastPurchaseQuantity = toTake;
+                listing.LastPurchaseStatus = "pending";
+                listing.LastPurchaseExpiresAt = Timestamp.FromDateTime(now.AddMinutes(5));
 
                 transaction.Set(docRef, listing);
                 return toTake;
@@ -387,6 +392,105 @@ public class FirestoreService(
         {
             logger.Error($"[TheQuartermaster] Failed to purchase quantity from listing {listingId}: {ex.Message}", ex);
             return 0;
+        }
+    }
+
+    public async Task CompleteListingPurchaseAsync(string listingId, string idempotencyKey)
+    {
+        if (_db is null || string.IsNullOrWhiteSpace(listingId) || string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            return;
+        }
+
+        var docRef = _db.Collection(QuartermasterConstants.FirestoreCollections.Listings).Document(listingId);
+
+        try
+        {
+            await _db.RunTransactionAsync(async transaction =>
+            {
+                var snapshot = await transaction.GetSnapshotAsync(docRef);
+                if (!snapshot.Exists)
+                {
+                    return;
+                }
+
+                var listing = snapshot.ConvertTo<QuartermasterListing>();
+                if (!string.Equals(listing.LastPurchaseId, idempotencyKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                listing.LastPurchaseStatus = "completed";
+                transaction.Set(docRef, listing);
+            });
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Failed to complete purchase for listing {listingId}: {ex.Message}", ex);
+        }
+    }
+
+    public async Task ReleaseListingQuantityAsync(string listingId, string idempotencyKey)
+    {
+        if (_db is null || string.IsNullOrWhiteSpace(listingId) || string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            return;
+        }
+
+        var docRef = _db.Collection(QuartermasterConstants.FirestoreCollections.Listings).Document(listingId);
+
+        try
+        {
+            await _db.RunTransactionAsync(async transaction =>
+            {
+                var snapshot = await transaction.GetSnapshotAsync(docRef);
+                if (!snapshot.Exists)
+                {
+                    return;
+                }
+
+                var listing = snapshot.ConvertTo<QuartermasterListing>();
+                if (!string.Equals(listing.LastPurchaseId, idempotencyKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                if (string.Equals(listing.LastPurchaseStatus, "completed", StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                var reservedQuantity = listing.LastPurchaseQuantity;
+                if (reservedQuantity <= 0)
+                {
+                    return;
+                }
+
+                if (listing.Status == ListingStatus.Sold)
+                {
+                    listing.Status = ListingStatus.Active;
+                    listing.BuyerHash = null;
+                    listing.BuyerUid = null;
+                    listing.SoldAt = null;
+                    listing.ItemTreeJson = UpdateListingQuantity(listing.ItemTreeJson, reservedQuantity);
+                }
+                else
+                {
+                    var currentQuantity = GetListingQuantity(listing.ItemTreeJson);
+                    listing.ItemTreeJson = UpdateListingQuantity(listing.ItemTreeJson, currentQuantity + reservedQuantity);
+                }
+
+                listing.LastPurchaseId = null;
+                listing.LastPurchaseQuantity = 0;
+                listing.LastPurchaseStatus = null;
+                listing.LastPurchaseExpiresAt = null;
+
+                transaction.Set(docRef, listing);
+            });
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Failed to release listing quantity for {listingId}: {ex.Message}", ex);
         }
     }
 
