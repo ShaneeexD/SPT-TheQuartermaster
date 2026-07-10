@@ -16,6 +16,33 @@ public class FirestoreContractService(
 
     public bool IsEnabled => firestoreService.IsEnabled;
 
+    private readonly object _cacheLock = new();
+    private List<ContractDefinition>? _cachedDefinitions;
+    private DateTime _cachedDefinitionsAt = DateTime.MinValue;
+    private List<ContractScheduleEntry>? _cachedScheduleEntries;
+    private DateTime _cachedScheduleEntriesAt = DateTime.MinValue;
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(15);
+
+    private bool IsCacheFresh(DateTime cachedAt) => cachedAt != DateTime.MinValue && DateTime.UtcNow - cachedAt < CacheTtl;
+
+    private void InvalidateDefinitionsCache()
+    {
+        lock (_cacheLock)
+        {
+            _cachedDefinitions = null;
+            _cachedDefinitionsAt = DateTime.MinValue;
+        }
+    }
+
+    private void InvalidateScheduleEntriesCache()
+    {
+        lock (_cacheLock)
+        {
+            _cachedScheduleEntries = null;
+            _cachedScheduleEntriesAt = DateTime.MinValue;
+        }
+    }
+
     public async Task<List<ContractSubmission>> GetAllSubmissionsAsync()
     {
         var result = new List<ContractSubmission>();
@@ -138,6 +165,7 @@ public class FirestoreContractService(
             var docRef = Db.Collection(QuartermasterConstants.FirestoreCollections.ContractDefinitions).Document();
             definition.Id = docRef.Id;
             await docRef.SetAsync(definition);
+            InvalidateDefinitionsCache();
             return definition;
         }
         catch (Exception ex)
@@ -149,32 +177,13 @@ public class FirestoreContractService(
 
     public async Task<List<ContractDefinition>> GetApprovedTemplatesAsync()
     {
-        var result = new List<ContractDefinition>();
         if (Db is null)
         {
-            return result;
+            return new List<ContractDefinition>();
         }
 
-        try
-        {
-            var snapshot = await Db.Collection(QuartermasterConstants.FirestoreCollections.ContractDefinitions)
-                .WhereIn("status", new List<string> { ContractStatus.Approved, ContractStatus.AdminFeatured })
-                .WhereEqualTo("admin_blocked", false)
-                .GetSnapshotAsync();
-
-            foreach (var doc in snapshot.Documents)
-            {
-                var definition = doc.ConvertTo<ContractDefinition>();
-                definition.Id = doc.Id;
-                result.Add(definition);
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.Error($"[TheQuartermaster] Failed to fetch approved templates: {ex.Message}", ex);
-        }
-
-        return result;
+        var definitions = await GetDefinitionsAsync(ContractStatus.Approved, ContractStatus.AdminFeatured);
+        return definitions.Where(d => !d.AdminBlocked).ToList();
     }
 
     public async Task<ContractScheduleEntry?> CreateScheduleEntryAsync(ContractScheduleEntry entry)
@@ -191,6 +200,7 @@ public class FirestoreContractService(
                 : Db.Collection(QuartermasterConstants.FirestoreCollections.ContractSchedule).Document(entry.Id);
             entry.Id = docRef.Id;
             await docRef.SetAsync(entry);
+            InvalidateScheduleEntriesCache();
             return entry;
         }
         catch (Exception ex)
@@ -246,6 +256,9 @@ public class FirestoreContractService(
                 return entry;
             });
 
+            InvalidateDefinitionsCache();
+            InvalidateScheduleEntriesCache();
+
             return created;
         }
         catch (Exception ex)
@@ -263,20 +276,34 @@ public class FirestoreContractService(
             return result;
         }
 
+        List<ContractDefinition>? cached;
+        DateTime cachedAt;
+        lock (_cacheLock)
+        {
+            cached = _cachedDefinitions;
+            cachedAt = _cachedDefinitionsAt;
+        }
+
+        if (cached is not null && IsCacheFresh(cachedAt))
+        {
+            return FilterDefinitions(cached, statuses);
+        }
+
         try
         {
-            Query query = Db.Collection(QuartermasterConstants.FirestoreCollections.ContractDefinitions);
-            if (statuses.Length > 0)
-            {
-                query = query.WhereIn("status", statuses.ToList());
-            }
-
-            var snapshot = await query.GetSnapshotAsync();
+            var snapshot = await Db.Collection(QuartermasterConstants.FirestoreCollections.ContractDefinitions)
+                .GetSnapshotAsync();
             foreach (var doc in snapshot.Documents)
             {
                 var definition = doc.ConvertTo<ContractDefinition>();
                 definition.Id = doc.Id;
                 result.Add(definition);
+            }
+
+            lock (_cacheLock)
+            {
+                _cachedDefinitions = result;
+                _cachedDefinitionsAt = DateTime.UtcNow;
             }
         }
         catch (Exception ex)
@@ -284,7 +311,20 @@ public class FirestoreContractService(
             logger.Error($"[TheQuartermaster] Failed to fetch contract definitions: {ex.Message}", ex);
         }
 
-        return result;
+        return FilterDefinitions(result, statuses);
+    }
+
+    private static List<ContractDefinition> FilterDefinitions(List<ContractDefinition> definitions, string[] statuses)
+    {
+        if (statuses.Length == 0)
+        {
+            return definitions;
+        }
+
+        var statusSet = new HashSet<string>(statuses, StringComparer.OrdinalIgnoreCase);
+        return definitions
+            .Where(d => !string.IsNullOrWhiteSpace(d.Status) && statusSet.Contains(d.Status))
+            .ToList();
     }
 
     public async Task<ContractDefinition?> UpdateDefinitionAsync(ContractDefinition definition)
@@ -298,6 +338,7 @@ public class FirestoreContractService(
         {
             var docRef = Db.Collection(QuartermasterConstants.FirestoreCollections.ContractDefinitions).Document(definition.Id);
             await docRef.SetAsync(definition, SetOptions.MergeAll);
+            InvalidateDefinitionsCache();
             return definition;
         }
         catch (Exception ex)
@@ -315,20 +356,34 @@ public class FirestoreContractService(
             return result;
         }
 
+        List<ContractScheduleEntry>? cached;
+        DateTime cachedAt;
+        lock (_cacheLock)
+        {
+            cached = _cachedScheduleEntries;
+            cachedAt = _cachedScheduleEntriesAt;
+        }
+
+        if (cached is not null && IsCacheFresh(cachedAt))
+        {
+            return FilterScheduleEntries(cached, statuses);
+        }
+
         try
         {
-            Query query = Db.Collection(QuartermasterConstants.FirestoreCollections.ContractSchedule);
-            if (statuses.Length > 0)
-            {
-                query = query.WhereIn("status", statuses.ToList());
-            }
-
-            var snapshot = await query.GetSnapshotAsync();
+            var snapshot = await Db.Collection(QuartermasterConstants.FirestoreCollections.ContractSchedule)
+                .GetSnapshotAsync();
             foreach (var doc in snapshot.Documents)
             {
                 var entry = doc.ConvertTo<ContractScheduleEntry>();
                 entry.Id = doc.Id;
                 result.Add(entry);
+            }
+
+            lock (_cacheLock)
+            {
+                _cachedScheduleEntries = result;
+                _cachedScheduleEntriesAt = DateTime.UtcNow;
             }
         }
         catch (Exception ex)
@@ -336,7 +391,20 @@ public class FirestoreContractService(
             logger.Error($"[TheQuartermaster] Failed to fetch schedule entries: {ex.Message}", ex);
         }
 
-        return result;
+        return FilterScheduleEntries(result, statuses);
+    }
+
+    private static List<ContractScheduleEntry> FilterScheduleEntries(List<ContractScheduleEntry> entries, string[] statuses)
+    {
+        if (statuses.Length == 0)
+        {
+            return entries;
+        }
+
+        var statusSet = new HashSet<string>(statuses, StringComparer.OrdinalIgnoreCase);
+        return entries
+            .Where(e => !string.IsNullOrWhiteSpace(e.Status) && statusSet.Contains(e.Status))
+            .ToList();
     }
 
     public async Task<ContractScheduleEntry?> UpdateScheduleEntryAsync(ContractScheduleEntry entry)
@@ -350,6 +418,7 @@ public class FirestoreContractService(
         {
             var docRef = Db.Collection(QuartermasterConstants.FirestoreCollections.ContractSchedule).Document(entry.Id);
             await docRef.SetAsync(entry, SetOptions.MergeAll);
+            InvalidateScheduleEntriesCache();
             return entry;
         }
         catch (Exception ex)
@@ -361,94 +430,46 @@ public class FirestoreContractService(
 
     public async Task<List<ContractScheduleEntry>> GetActiveScheduleEntriesAsync()
     {
-        var result = new List<ContractScheduleEntry>();
         if (Db is null)
         {
-            return result;
+            return new List<ContractScheduleEntry>();
         }
 
-        try
-        {
-            var now = Timestamp.GetCurrentTimestamp();
-            var snapshot = await Db.Collection(QuartermasterConstants.FirestoreCollections.ContractSchedule)
-                .WhereEqualTo("status", ContractStatus.Active)
-                .WhereGreaterThan("end_at", now)
-                .GetSnapshotAsync();
-
-            foreach (var doc in snapshot.Documents)
-            {
-                var entry = doc.ConvertTo<ContractScheduleEntry>();
-                entry.Id = doc.Id;
-                result.Add(entry);
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.Error($"[TheQuartermaster] Failed to fetch active schedule entries: {ex.Message}", ex);
-        }
-
-        return result;
+        var now = DateTime.UtcNow;
+        var all = await GetScheduleEntriesAsync();
+        return all
+            .Where(e => string.Equals(e.Status, ContractStatus.Active, StringComparison.OrdinalIgnoreCase))
+            .Where(e => e.EndAt?.ToDateTime() > now)
+            .ToList();
     }
 
     public async Task<List<ContractScheduleEntry>> GetScheduledEntriesToActivateAsync()
     {
-        var result = new List<ContractScheduleEntry>();
         if (Db is null)
         {
-            return result;
+            return new List<ContractScheduleEntry>();
         }
 
-        try
-        {
-            var now = Timestamp.GetCurrentTimestamp();
-            var snapshot = await Db.Collection(QuartermasterConstants.FirestoreCollections.ContractSchedule)
-                .WhereEqualTo("status", ContractStatus.Scheduled)
-                .WhereLessThanOrEqualTo("start_at", now)
-                .GetSnapshotAsync();
-
-            foreach (var doc in snapshot.Documents)
-            {
-                var entry = doc.ConvertTo<ContractScheduleEntry>();
-                entry.Id = doc.Id;
-                result.Add(entry);
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.Error($"[TheQuartermaster] Failed to fetch scheduled entries to activate: {ex.Message}", ex);
-        }
-
-        return result;
+        var now = DateTime.UtcNow;
+        var all = await GetScheduleEntriesAsync();
+        return all
+            .Where(e => string.Equals(e.Status, ContractStatus.Scheduled, StringComparison.OrdinalIgnoreCase))
+            .Where(e => e.StartAt?.ToDateTime() <= now)
+            .ToList();
     }
 
     public async Task<List<ContractScheduleEntry>> GetActiveEntriesToExpireAsync()
     {
-        var result = new List<ContractScheduleEntry>();
         if (Db is null)
         {
-            return result;
+            return new List<ContractScheduleEntry>();
         }
 
-        try
-        {
-            var now = Timestamp.GetCurrentTimestamp();
-            var snapshot = await Db.Collection(QuartermasterConstants.FirestoreCollections.ContractSchedule)
-                .WhereEqualTo("status", ContractStatus.Active)
-                .WhereLessThanOrEqualTo("end_at", now)
-                .GetSnapshotAsync();
-
-            foreach (var doc in snapshot.Documents)
-            {
-                var entry = doc.ConvertTo<ContractScheduleEntry>();
-                entry.Id = doc.Id;
-                result.Add(entry);
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.Error($"[TheQuartermaster] Failed to fetch active entries to expire: {ex.Message}", ex);
-        }
-
-        return result;
+        var now = DateTime.UtcNow;
+        var all = await GetScheduleEntriesAsync();
+        return all
+            .Where(e => string.Equals(e.Status, ContractStatus.Active, StringComparison.OrdinalIgnoreCase))
+            .Where(e => e.EndAt?.ToDateTime() <= now)
+            .ToList();
     }
 }
