@@ -24,6 +24,9 @@ public record QuartermasterConfig
     [JsonIgnore]
     public int WorkerIntervalMinutes { get; set; } = 5;
 
+    [JsonIgnore]
+    public int CommunityContractIntervalMinutes { get; set; } = 15;
+
     // Marketplace storage backend ("firestore" or "realtimeDatabase")
     [JsonIgnore]
     public string MarketplaceStorage { get; set; } = "realtimeDatabase";
