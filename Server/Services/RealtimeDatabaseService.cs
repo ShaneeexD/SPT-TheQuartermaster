@@ -49,13 +49,6 @@ public class RealtimeDatabaseService(
             return;
         }
 
-        if (!string.Equals(configService.Config.MarketplaceStorage, "realtimeDatabase", StringComparison.OrdinalIgnoreCase))
-        {
-            IsEnabled = false;
-            logger.Info("[TheQuartermaster] Realtime Database not selected as marketplace backend.");
-            return;
-        }
-
         if (string.IsNullOrWhiteSpace(ResolveDatabaseUrl()) ||
             string.IsNullOrWhiteSpace(configService.Config.FirebaseProjectId) ||
             string.IsNullOrWhiteSpace(configService.Config.FirebaseApiKey))

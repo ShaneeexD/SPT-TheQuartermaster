@@ -41,7 +41,6 @@ public static class QuartermasterConstants
 
     public static class FirestoreCollections
     {
-        public const string Listings = "quartermaster_listings";
         public const string Meta = "quartermaster_meta";
         public const string Bans = "quartermaster_bans";
         public const string Config = "quartermaster_config";

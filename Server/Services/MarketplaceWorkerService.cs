@@ -8,8 +8,7 @@ public class MarketplaceWorkerService(
     ISptLogger<MarketplaceWorkerService> logger,
     ConfigService configService,
     MarketplaceService marketplaceService,
-    RealtimeDatabaseService realtimeDatabaseService,
-    WorkerLockService workerLockService
+    RealtimeDatabaseService realtimeDatabaseService
 )
 {
     private readonly SemaphoreSlim _semaphore = new(1, 1);
@@ -63,22 +62,10 @@ public class MarketplaceWorkerService(
             var now = DateTime.UtcNow;
             _lastTick = now;
 
-            var useRtdb = string.Equals(configService.Config.MarketplaceStorage, "realtimeDatabase", StringComparison.OrdinalIgnoreCase);
-            if (useRtdb)
+            if (!await realtimeDatabaseService.TryAcquireCatalogueLeaseAsync(TimeSpan.FromMinutes(2)))
             {
-                if (!await realtimeDatabaseService.TryAcquireCatalogueLeaseAsync(TimeSpan.FromMinutes(2)))
-                {
-                    logger.Debug("[TheQuartermaster] Marketplace worker could not acquire RTDB lease; skipping.");
-                    return;
-                }
-            }
-            else
-            {
-                if (configService.Config.EnableDistributedWorker && !await workerLockService.IsLeaderAsync())
-                {
-                    logger.Debug("[TheQuartermaster] Marketplace worker could not acquire Firestore lease; skipping.");
-                    return;
-                }
+                logger.Debug("[TheQuartermaster] Marketplace worker could not acquire RTDB lease; skipping.");
+                return;
             }
 
             logger.Debug("[TheQuartermaster] Marketplace worker tick started.");
@@ -87,20 +74,14 @@ public class MarketplaceWorkerService(
             await marketplaceService.DeleteExpiredListingsAsync();
             await marketplaceService.RebuildCatalogueAsync();
 
-            if (useRtdb)
-            {
-                await realtimeDatabaseService.ReleaseCatalogueLeaseAsync();
-            }
+            await realtimeDatabaseService.ReleaseCatalogueLeaseAsync();
 
             logger.Debug("[TheQuartermaster] Marketplace worker tick complete.");
         }
         catch (Exception ex)
         {
             logger.Error($"[TheQuartermaster] Marketplace worker tick failed: {ex.Message}", ex);
-            if (string.Equals(configService.Config.MarketplaceStorage, "realtimeDatabase", StringComparison.OrdinalIgnoreCase))
-            {
-                await realtimeDatabaseService.ReleaseCatalogueLeaseAsync();
-            }
+            await realtimeDatabaseService.ReleaseCatalogueLeaseAsync();
         }
         finally
         {

@@ -27,10 +27,6 @@ public record QuartermasterConfig
     [JsonIgnore]
     public int CommunityContractIntervalMinutes { get; set; } = 15;
 
-    // Marketplace storage backend ("firestore" or "realtimeDatabase")
-    [JsonIgnore]
-    public string MarketplaceStorage { get; set; } = "realtimeDatabase";
-
     // Firebase public client configuration (no service account in public builds)
     [JsonIgnore]
     public string FirebaseProjectId { get; set; } = "spt-the-quartermaster";

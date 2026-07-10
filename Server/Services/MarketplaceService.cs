@@ -6,164 +6,113 @@ namespace TheQuartermaster.Server.Services;
 
 [Injectable(InjectionType.Singleton)]
 public class MarketplaceService(
-    ConfigService configService,
-    FirestoreService firestoreService,
     RealtimeDatabaseService realtimeDatabaseService
 )
 {
-    public bool IsEnabled => UseRealtimeDatabase
-        ? realtimeDatabaseService.IsEnabled
-        : firestoreService.IsEnabled;
-
-    private bool UseRealtimeDatabase =>
-        string.Equals(configService.Config.MarketplaceStorage, "realtimeDatabase", StringComparison.OrdinalIgnoreCase);
+    public bool IsEnabled => realtimeDatabaseService.IsEnabled;
 
     public async Task InitialiseAsync()
     {
-        if (UseRealtimeDatabase)
-        {
-            await realtimeDatabaseService.InitialiseAsync();
-        }
+        await realtimeDatabaseService.InitialiseAsync();
     }
 
-    public async Task<QuartermasterListing?> UploadListingAsync(QuartermasterListing listing)
+    public Task<QuartermasterListing?> UploadListingAsync(QuartermasterListing listing)
     {
         if (!IsEnabled)
         {
-            return null;
+            return Task.FromResult<QuartermasterListing?>(null);
         }
 
-        return UseRealtimeDatabase
-            ? await realtimeDatabaseService.UploadListingAsync(listing)
-            : await firestoreService.UploadListingAsync(listing);
+        return realtimeDatabaseService.UploadListingAsync(listing);
     }
 
-    public async Task<List<QuartermasterListing>> GetActiveListingsAsync()
+    public Task<List<QuartermasterListing>> GetActiveListingsAsync()
     {
         if (!IsEnabled)
         {
-            return [];
+            return Task.FromResult(new List<QuartermasterListing>());
         }
 
-        return UseRealtimeDatabase
-            ? await realtimeDatabaseService.GetActiveListingsAsync()
-            : await firestoreService.GetActiveListingsAsync();
+        return realtimeDatabaseService.GetActiveListingsAsync();
     }
 
-    public async Task<int> GetActiveListingCountAsync()
+    public Task<int> GetActiveListingCountAsync()
     {
         if (!IsEnabled)
         {
-            return 0;
+            return Task.FromResult(0);
         }
 
-        return UseRealtimeDatabase
-            ? await realtimeDatabaseService.GetActiveListingCountAsync()
-            : await firestoreService.GetActiveListingCountAsync();
+        return realtimeDatabaseService.GetActiveListingCountAsync();
     }
 
-    public async Task<QuartermasterListing?> GetListingAsync(string listingId)
+    public Task<QuartermasterListing?> GetListingAsync(string listingId)
     {
         if (!IsEnabled)
         {
-            return null;
+            return Task.FromResult<QuartermasterListing?>(null);
         }
 
-        return UseRealtimeDatabase
-            ? await realtimeDatabaseService.GetListingAsync(listingId)
-            : await firestoreService.GetListingAsync(listingId);
+        return realtimeDatabaseService.GetListingAsync(listingId);
     }
 
-    public async Task<int> TryPurchaseListingQuantityAsync(string listingId, string buyerProfileId, int quantity, string idempotencyKey)
+    public Task<int> TryPurchaseListingQuantityAsync(string listingId, string buyerProfileId, int quantity, string idempotencyKey)
     {
         if (!IsEnabled)
         {
-            return 0;
+            return Task.FromResult(0);
         }
 
-        return UseRealtimeDatabase
-            ? await realtimeDatabaseService.TryPurchaseListingQuantityAsync(listingId, buyerProfileId, quantity, idempotencyKey)
-            : await firestoreService.TryPurchaseListingQuantityAsync(listingId, buyerProfileId, quantity, idempotencyKey);
+        return realtimeDatabaseService.TryPurchaseListingQuantityAsync(listingId, buyerProfileId, quantity, idempotencyKey);
     }
 
-    public async Task CompleteListingPurchaseAsync(string listingId, string idempotencyKey)
+    public Task CompleteListingPurchaseAsync(string listingId, string idempotencyKey)
     {
         if (!IsEnabled)
         {
-            return;
+            return Task.CompletedTask;
         }
 
-        if (UseRealtimeDatabase)
-        {
-            await realtimeDatabaseService.CompleteListingPurchaseAsync(listingId, idempotencyKey);
-        }
-        else
-        {
-            await firestoreService.CompleteListingPurchaseAsync(listingId, idempotencyKey);
-        }
+        return realtimeDatabaseService.CompleteListingPurchaseAsync(listingId, idempotencyKey);
     }
 
-    public async Task ReleaseListingQuantityAsync(string listingId, string idempotencyKey)
+    public Task ReleaseListingQuantityAsync(string listingId, string idempotencyKey)
     {
         if (!IsEnabled)
         {
-            return;
+            return Task.CompletedTask;
         }
 
-        if (UseRealtimeDatabase)
-        {
-            await realtimeDatabaseService.ReleaseListingQuantityAsync(listingId, idempotencyKey);
-        }
-        else
-        {
-            await firestoreService.ReleaseListingQuantityAsync(listingId, idempotencyKey);
-        }
+        return realtimeDatabaseService.ReleaseListingQuantityAsync(listingId, idempotencyKey);
     }
 
-    public async Task CleanupExpiredListingsAsync()
+    public Task CleanupExpiredListingsAsync()
     {
         if (!IsEnabled)
         {
-            return;
+            return Task.CompletedTask;
         }
 
-        if (UseRealtimeDatabase)
-        {
-            await realtimeDatabaseService.CleanupExpiredListingsAsync();
-        }
-        else
-        {
-            await firestoreService.CleanupExpiredListingsAsync();
-        }
+        return realtimeDatabaseService.CleanupExpiredListingsAsync();
     }
 
-    public async Task DeleteExpiredListingsAsync()
+    public Task DeleteExpiredListingsAsync()
     {
         if (!IsEnabled)
         {
-            return;
+            return Task.CompletedTask;
         }
 
-        if (UseRealtimeDatabase)
-        {
-            await realtimeDatabaseService.DeleteExpiredListingsAsync();
-        }
-        else
-        {
-            await firestoreService.DeleteExpiredListingsAsync();
-        }
+        return realtimeDatabaseService.DeleteExpiredListingsAsync();
     }
 
-    public async Task RebuildCatalogueAsync()
+    public Task RebuildCatalogueAsync()
     {
         if (!IsEnabled)
         {
-            return;
+            return Task.CompletedTask;
         }
 
-        if (UseRealtimeDatabase)
-        {
-            await realtimeDatabaseService.RebuildCatalogueAsync();
-        }
+        return realtimeDatabaseService.RebuildCatalogueAsync();
     }
 }
