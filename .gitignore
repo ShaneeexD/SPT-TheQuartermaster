@@ -105,6 +105,7 @@ Server/Build
 /tools/seed-contract
 package-lock.json
 rtdb.rules
+buildcommand.txt
 
 # Build artifacts / logs
 *.binlog
