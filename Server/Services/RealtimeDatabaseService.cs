@@ -656,6 +656,11 @@ public class RealtimeDatabaseService(
                 return;
             }
 
+            if (meta is null)
+            {
+                logger.Info("[TheQuartermaster] No catalogue meta found; building initial catalogue.");
+            }
+
             _cachedVersion = version;
             var generatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var pageCount = (int)Math.Ceiling(listings.Count / (double)CataloguePageSize);
