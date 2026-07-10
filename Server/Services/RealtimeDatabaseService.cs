@@ -890,6 +890,10 @@ public class RealtimeDatabaseService(
         using var request = new HttpRequestMessage(HttpMethod.Put, url);
         request.Content = new StringContent(JsonSerializer.Serialize(value, _jsonOptions), Encoding.UTF8, "application/json");
         using var response = await _httpClient.SendAsync(request);
+        if (!response.IsSuccessStatusCode)
+        {
+            logger.Warning($"[TheQuartermaster] RTDB write failed for {path}: {response.StatusCode} {await response.Content.ReadAsStringAsync()}");
+        }
         return response.IsSuccessStatusCode;
     }
 
