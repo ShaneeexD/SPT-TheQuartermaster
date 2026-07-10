@@ -38,7 +38,6 @@ public class RealtimeDatabaseService(
     public string InstanceId => _instanceId;
 
     private const string RootPath = "quartermaster";
-    private const int CataloguePageSize = 50;
     private const int MaxPurchaseRetries = 3;
 
     public async Task InitialiseAsync()
@@ -677,42 +676,18 @@ public class RealtimeDatabaseService(
 
             _cachedVersion = version;
             var generatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var pageCount = (int)Math.Ceiling(listings.Count / (double)CataloguePageSize);
-            if (pageCount == 0)
-            {
-                pageCount = 1;
-            }
-
-            var rtdbListings = listings.Select(ToRtdbListing).ToList();
-            for (var pageIndex = 0; pageIndex < pageCount; pageIndex++)
-            {
-                var pageListings = rtdbListings
-                    .Skip(pageIndex * CataloguePageSize)
-                    .Take(CataloguePageSize)
-                    .ToList();
-
-                var page = new RtdbCataloguePage
-                {
-                    PageId = $"page_{pageIndex:D3}",
-                    CatalogueVersion = version,
-                    GeneratedAt = generatedAt,
-                    Listings = pageListings
-                };
-
-                await PutJsonAsync($"catalogue/versions/{version}/pages/{page.PageId}", page);
-            }
 
             var newMeta = new RtdbCatalogueMeta
             {
                 Version = version,
                 GeneratedAt = generatedAt,
-                PageCount = pageCount,
+                PageCount = 1,
                 ListingCount = listings.Count
             };
 
             await PutJsonAsync("meta/catalogue", newMeta);
             await SaveCatalogueCache(listings, version);
-            logger.Info($"[TheQuartermaster] Rebuilt catalogue version {version} with {listings.Count} listings across {pageCount} pages.");
+            logger.Info($"[TheQuartermaster] Rebuilt catalogue version {version} with {listings.Count} listings.");
         }
         catch (Exception ex)
         {
@@ -1123,7 +1098,7 @@ public class RealtimeDatabaseService(
             {
                 Version = version,
                 GeneratedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                PageCount = (int)Math.Ceiling(listings.Count / (double)CataloguePageSize),
+                PageCount = 1,
                 Listings = listings.Select(ToRtdbListing).ToList(),
                 States = new Dictionary<string, RtdbListingState>()
             };
