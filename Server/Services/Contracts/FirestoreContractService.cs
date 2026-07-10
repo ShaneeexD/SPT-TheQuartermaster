@@ -43,6 +43,56 @@ public class FirestoreContractService(
         }
     }
 
+    public async Task<long> GetContractVersionAsync()
+    {
+        if (Db is null)
+        {
+            return 0;
+        }
+
+        try
+        {
+            var docRef = Db.Collection(QuartermasterConstants.FirestoreCollections.Meta)
+                .Document(QuartermasterConstants.FirestoreConfig.ContractVersion);
+            var snapshot = await docRef.GetSnapshotAsync();
+            if (!snapshot.Exists)
+            {
+                return 0;
+            }
+
+            return snapshot.ContainsField("version") ? snapshot.GetValue<long>("version") : 0;
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Failed to read contract version: {ex.Message}", ex);
+            return 0;
+        }
+    }
+
+    public async Task<long> BumpContractVersionAsync()
+    {
+        if (Db is null)
+        {
+            return 0;
+        }
+
+        try
+        {
+            var docRef = Db.Collection(QuartermasterConstants.FirestoreCollections.Meta)
+                .Document(QuartermasterConstants.FirestoreConfig.ContractVersion);
+            await docRef.SetAsync(
+                new { version = FieldValue.Increment(1), updated_at = FieldValue.ServerTimestamp },
+                SetOptions.MergeAll);
+            var snapshot = await docRef.GetSnapshotAsync();
+            return snapshot.Exists && snapshot.ContainsField("version") ? snapshot.GetValue<long>("version") : 0;
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Failed to bump contract version: {ex.Message}", ex);
+            return 0;
+        }
+    }
+
     public async Task<List<ContractSubmission>> GetAllSubmissionsAsync()
     {
         var result = new List<ContractSubmission>();
@@ -166,6 +216,7 @@ public class FirestoreContractService(
             definition.Id = docRef.Id;
             await docRef.SetAsync(definition);
             InvalidateDefinitionsCache();
+            await BumpContractVersionAsync();
             return definition;
         }
         catch (Exception ex)
@@ -201,6 +252,7 @@ public class FirestoreContractService(
             entry.Id = docRef.Id;
             await docRef.SetAsync(entry);
             InvalidateScheduleEntriesCache();
+            await BumpContractVersionAsync();
             return entry;
         }
         catch (Exception ex)
@@ -258,6 +310,7 @@ public class FirestoreContractService(
 
             InvalidateDefinitionsCache();
             InvalidateScheduleEntriesCache();
+            await BumpContractVersionAsync();
 
             return created;
         }
@@ -339,6 +392,7 @@ public class FirestoreContractService(
             var docRef = Db.Collection(QuartermasterConstants.FirestoreCollections.ContractDefinitions).Document(definition.Id);
             await docRef.SetAsync(definition, SetOptions.MergeAll);
             InvalidateDefinitionsCache();
+            await BumpContractVersionAsync();
             return definition;
         }
         catch (Exception ex)
@@ -419,6 +473,7 @@ public class FirestoreContractService(
             var docRef = Db.Collection(QuartermasterConstants.FirestoreCollections.ContractSchedule).Document(entry.Id);
             await docRef.SetAsync(entry, SetOptions.MergeAll);
             InvalidateScheduleEntriesCache();
+            await BumpContractVersionAsync();
             return entry;
         }
         catch (Exception ex)

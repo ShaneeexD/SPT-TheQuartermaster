@@ -54,5 +54,6 @@ public static class QuartermasterConstants
     public static class FirestoreConfig
     {
         public const string ContractConfig = "contract_config";
+        public const string ContractVersion = "contract_version";
     }
 }

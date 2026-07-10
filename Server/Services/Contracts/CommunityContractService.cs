@@ -17,6 +17,7 @@ public class CommunityContractService(
     private readonly SemaphoreSlim _semaphore = new(1, 1);
     private Timer? _timer;
     private DateTime _lastRefresh = DateTime.MinValue;
+    private long _cachedVersion = -1;
     private static readonly TimeSpan MinRefreshInterval = TimeSpan.FromMinutes(1);
 
     public void Start()
@@ -85,6 +86,13 @@ public class CommunityContractService(
                 return;
             }
 
+            var version = await firestoreContractService.GetContractVersionAsync();
+            if (version == _cachedVersion)
+            {
+                logger.Debug($"[TheQuartermaster] Community contract version {version} unchanged; skipping refresh.");
+                return;
+            }
+
             var activeEntries = await firestoreContractService.GetActiveScheduleEntriesAsync();
             var definitionIds = activeEntries.Select(e => e.ContractDefinitionId).Distinct().ToList();
 
@@ -98,6 +106,7 @@ public class CommunityContractService(
                 .ToDictionary(d => d.Id!, StringComparer.OrdinalIgnoreCase);
 
             await contractInjectionService.InjectActiveContractsAsync(activeEntries, definitions);
+            _cachedVersion = version;
 
             logger.Info($"[TheQuartermaster] Community contract tick complete. {activeEntries.Count} active schedule entr(y/ies).");
         }
