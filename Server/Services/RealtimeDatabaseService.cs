@@ -168,14 +168,20 @@ public class RealtimeDatabaseService(
 
         try
         {
+            var wasInitialized = _cacheInitialized;
             var (listings, refreshed) = await RefreshActiveListingsIfNeededAsync();
+            var versionText = _cachedVersion ?? "(none)";
             if (refreshed)
             {
-                logger.Info($"[TheQuartermaster] Catalogue version {_cachedVersion} updated; loaded {listings.Count} active listings.");
+                logger.Info($"[TheQuartermaster] Catalogue version {versionText} updated; loaded {listings.Count} active listings.");
+            }
+            else if (!wasInitialized)
+            {
+                logger.Info($"[TheQuartermaster] Catalogue version {versionText} unchanged; using local cache.");
             }
             else
             {
-                logger.Info($"[TheQuartermaster] Catalogue version {_cachedVersion} unchanged; using local cache.");
+                logger.Debug($"[TheQuartermaster] Catalogue version {versionText} unchanged; using local cache.");
             }
             return listings;
         }

@@ -77,7 +77,7 @@ public class TraderService(
             {
                 var listings = await marketplaceService.GetActiveListingsAsync();
                 _activeListings.AddRange(listings.Where(l => !backendConfigService.Config.VanillaItemsOnly || l.IsVanilla));
-                logger.Info($"[TheQuartermaster] Loaded {_activeListings.Count} active listings from marketplace backend.");
+                logger.Info($"[TheQuartermaster] Loaded {_activeListings.Count} active listings into trader assortment.");
             }
 
             var traderBase = BuildTraderBase(modPath);
