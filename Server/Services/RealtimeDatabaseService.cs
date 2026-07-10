@@ -29,6 +29,11 @@ public class RealtimeDatabaseService(
     private DateTime _lastExpiredCleanup = DateTime.MinValue;
     private string _instanceId = $"{Environment.MachineName}-{Process.GetCurrentProcess().Id}-{Guid.NewGuid():N}";
 
+    private readonly SemaphoreSlim _cacheLock = new(1, 1);
+    private bool _cacheInitialized;
+    private string? _cachedVersion;
+    private List<QuartermasterListing> _cachedListings = [];
+
     public bool IsEnabled { get; private set; }
     public string InstanceId => _instanceId;
 
@@ -102,6 +107,7 @@ public class RealtimeDatabaseService(
             await PutJsonAsync($"listings/available/{listing.Id}", data);
             await PutJsonAsync($"listingStates/{listing.Id}", state);
             await PutJsonAsync(GetExpiryIndexPath(ToUnixSeconds(listing.ExpiresAt), listing.Id), true);
+            await BumpCatalogueVersionAsync();
 
             logger.Debug($"[TheQuartermaster] Uploaded listing {listing.Id} to RTDB.");
             return ToQuartermasterListing(data, state, listing.Id);
@@ -110,6 +116,32 @@ public class RealtimeDatabaseService(
         {
             logger.Error($"[TheQuartermaster] Failed to upload listing to RTDB: {ex.Message}", ex);
             return null;
+        }
+    }
+
+    private async Task<RtdbCatalogueMeta?> GetCatalogueMetaAsync()
+    {
+        return await GetJsonAsync<RtdbCatalogueMeta>("meta/catalogue");
+    }
+
+    public async Task BumpCatalogueVersionAsync()
+    {
+        if (!IsEnabled)
+        {
+            return;
+        }
+
+        try
+        {
+            var meta = await GetCatalogueMetaAsync() ?? new RtdbCatalogueMeta();
+            meta.Version = GenerateCatalogueVersion();
+            meta.GeneratedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            await PutJsonAsync("meta/catalogue", meta);
+            logger.Debug($"[TheQuartermaster] Bumped catalogue version to {meta.Version}.");
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Failed to bump catalogue version: {ex.Message}", ex);
         }
     }
 
@@ -123,65 +155,102 @@ public class RealtimeDatabaseService(
 
         try
         {
-            var listingsTask = GetDictionaryAsync<RtdbListing>("listings/available");
-            var statesTask = GetDictionaryAsync<RtdbListingState>("listingStates");
-            await Task.WhenAll(listingsTask, statesTask);
-
-            var listings = await listingsTask;
-            Dictionary<string, RtdbListingState> states = await statesTask ?? new Dictionary<string, RtdbListingState>();
-
-            logger.Debug($"[TheQuartermaster] RTDB raw listings count: {listings?.Count ?? 0}, raw states count: {states?.Count ?? 0}.");
-
-            if (listings is null)
+            var (listings, refreshed) = await RefreshActiveListingsIfNeededAsync();
+            if (refreshed)
             {
-                logger.Info("[TheQuartermaster] No listings returned from RTDB; trader will have 0 items.");
-                return result;
+                logger.Info($"[TheQuartermaster] Catalogue version {_cachedVersion} updated; loaded {listings.Count} active listings.");
             }
-
-            if (listings.Count == 0)
+            else
             {
-                logger.Info("[TheQuartermaster] RTDB has no active listings; trader will have 0 items.");
-                return result;
+                logger.Info($"[TheQuartermaster] Catalogue version {_cachedVersion} unchanged; using local cache.");
             }
-
-            var now = DateTime.UtcNow;
-            foreach (var (id, data) in listings)
-            {
-                states.TryGetValue(id, out var state);
-                state ??= new RtdbListingState
-                {
-                    Status = ListingStatus.Active,
-                    RemainingQuantity = GetListingQuantity(data.ItemTreeJson)
-                };
-
-                if (!string.Equals(state.Status, ListingStatus.Active, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                var expiresAt = state.ExpiresAt > 0
-                    ? DateTimeOffset.FromUnixTimeSeconds(state.ExpiresAt).UtcDateTime
-                    : (data.ExpiresAt > 0 ? DateTimeOffset.FromUnixTimeSeconds(data.ExpiresAt).UtcDateTime : now);
-                if (expiresAt <= now)
-                {
-                    continue;
-                }
-
-                result.Add(ToQuartermasterListing(data, state, id));
-            }
-
-            await SaveCatalogueCache(result);
-            logger.Info($"[TheQuartermaster] Loaded {result.Count} active listings from RTDB.");
+            return listings;
         }
         catch (Exception ex)
         {
-            logger.Error($"[TheQuartermaster] Failed to fetch active listings from RTDB: {ex.Message}", ex);
-            result = await LoadCatalogueCache();
+            logger.Error($"[TheQuartermaster] Failed to refresh active listings from RTDB: {ex.Message}", ex);
+            return await LoadCatalogueCache();
+        }
+    }
+
+    private async Task<(List<QuartermasterListing> Listings, bool Refreshed)> RefreshActiveListingsIfNeededAsync()
+    {
+        await _cacheLock.WaitAsync();
+        try
+        {
+            var meta = await GetCatalogueMetaAsync();
+            var remoteVersion = meta?.Version;
+            if (_cacheInitialized && _cachedVersion == remoteVersion)
+            {
+                return (_cachedListings.ToList(), false);
+            }
+
+            var listings = await LoadActiveListingsFromRtdbAsync();
+            _cachedListings = listings;
+            _cachedVersion = remoteVersion;
+            _cacheInitialized = true;
+            await SaveCatalogueCache(listings, remoteVersion);
+            return (listings, true);
+        }
+        finally
+        {
+            _cacheLock.Release();
+        }
+    }
+
+    private async Task<List<QuartermasterListing>> LoadActiveListingsFromRtdbAsync()
+    {
+        var result = new List<QuartermasterListing>();
+
+        var listingsTask = GetDictionaryAsync<RtdbListing>("listings/available");
+        var statesTask = GetDictionaryAsync<RtdbListingState>("listingStates");
+        await Task.WhenAll(listingsTask, statesTask);
+
+        var listings = await listingsTask;
+        Dictionary<string, RtdbListingState> states = await statesTask ?? new Dictionary<string, RtdbListingState>();
+
+        logger.Debug($"[TheQuartermaster] RTDB raw listings count: {listings?.Count ?? 0}, raw states count: {states?.Count ?? 0}.");
+
+        if (listings is null)
+        {
+            logger.Info("[TheQuartermaster] No listings returned from RTDB; trader will have 0 items.");
+            return result;
+        }
+
+        if (listings.Count == 0)
+        {
+            logger.Info("[TheQuartermaster] RTDB has no active listings; trader will have 0 items.");
+            return result;
+        }
+
+        var now = DateTime.UtcNow;
+        foreach (var (id, data) in listings)
+        {
+            states.TryGetValue(id, out var state);
+            state ??= new RtdbListingState
+            {
+                Status = ListingStatus.Active,
+                RemainingQuantity = GetListingQuantity(data.ItemTreeJson)
+            };
+
+            if (!string.Equals(state.Status, ListingStatus.Active, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var expiresAt = state.ExpiresAt > 0
+                ? DateTimeOffset.FromUnixTimeSeconds(state.ExpiresAt).UtcDateTime
+                : (data.ExpiresAt > 0 ? DateTimeOffset.FromUnixTimeSeconds(data.ExpiresAt).UtcDateTime : now);
+            if (expiresAt <= now)
+            {
+                continue;
+            }
+
+            result.Add(ToQuartermasterListing(data, state, id));
         }
 
         return result;
     }
-
     public async Task<int> GetActiveListingCountAsync()
     {
         if (!IsEnabled)
@@ -393,6 +462,8 @@ public class RealtimeDatabaseService(
                     await DeleteJsonAsync($"listings/available/{listingId}");
                 }
             }
+
+            await BumpCatalogueVersionAsync();
         }
         catch (Exception ex)
         {
@@ -512,6 +583,7 @@ public class RealtimeDatabaseService(
             if (count > 0)
             {
                 logger.Info($"[TheQuartermaster] Marked {count} expired listings in RTDB.");
+                await BumpCatalogueVersionAsync();
             }
         }
         catch (Exception ex)
@@ -552,6 +624,7 @@ public class RealtimeDatabaseService(
             if (count > 0)
             {
                 logger.Info($"[TheQuartermaster] Deleted {count} expired listings from RTDB.");
+                await BumpCatalogueVersionAsync();
             }
         }
         catch (Exception ex)
@@ -569,11 +642,22 @@ public class RealtimeDatabaseService(
 
         try
         {
-            var listings = await GetActiveListingsAsync();
-            var version = GenerateCatalogueVersion();
+            var (listings, refreshed) = await RefreshActiveListingsIfNeededAsync();
+            var version = _cachedVersion;
+            if (string.IsNullOrWhiteSpace(version))
+            {
+                version = GenerateCatalogueVersion();
+                _cachedVersion = version;
+            }
+
+            if (!refreshed)
+            {
+                logger.Info($"[TheQuartermaster] Catalogue version {version} unchanged; no rebuild needed.");
+                return;
+            }
+
             var generatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var pageCount = (int)Math.Ceiling(listings.Count / (double)CataloguePageSize);
-
             if (pageCount == 0)
             {
                 pageCount = 1;
@@ -607,6 +691,7 @@ public class RealtimeDatabaseService(
             };
 
             await PutJsonAsync("meta/catalogue", meta);
+            await SaveCatalogueCache(listings, version);
             logger.Info($"[TheQuartermaster] Rebuilt catalogue version {version} with {listings.Count} listings across {pageCount} pages.");
         }
         catch (Exception ex)
@@ -990,7 +1075,7 @@ public class RealtimeDatabaseService(
         return $"expiryIndex/{bucket}/{listingId}";
     }
 
-    private async Task SaveCatalogueCache(List<QuartermasterListing> listings)
+    private async Task SaveCatalogueCache(List<QuartermasterListing> listings, string? version)
     {
         try
         {
@@ -999,7 +1084,7 @@ public class RealtimeDatabaseService(
 
             var cache = new RtdbCatalogueCache
             {
-                Version = GenerateCatalogueVersion(),
+                Version = version,
                 GeneratedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                 PageCount = (int)Math.Ceiling(listings.Count / (double)CataloguePageSize),
                 Listings = listings.Select(ToRtdbListing).ToList(),
@@ -1037,6 +1122,18 @@ public class RealtimeDatabaseService(
             {
                 cache.States.TryGetValue(listing.Id ?? string.Empty, out var state);
                 result.Add(ToQuartermasterListing(listing, state, listing.Id ?? string.Empty));
+            }
+
+            await _cacheLock.WaitAsync();
+            try
+            {
+                _cachedListings = result.ToList();
+                _cachedVersion = cache.Version;
+                _cacheInitialized = true;
+            }
+            finally
+            {
+                _cacheLock.Release();
             }
 
             logger.Info($"[TheQuartermaster] Fell back to local catalogue cache with {result.Count} listings.");

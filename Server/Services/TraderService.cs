@@ -289,14 +289,14 @@ public class TraderService(
         {
             if (string.IsNullOrWhiteSpace(listing.RootTpl) || !itemHelper.IsItemInDb(new MongoId(listing.RootTpl)))
             {
-                logger.Warning($"[TheQuartermaster] Skipping listing {listing.Id}: root tpl {listing.RootTpl} not in runtime DB.");
+                logger.Debug($"[TheQuartermaster] Skipping listing {listing.Id}: root tpl {listing.RootTpl} not in runtime DB.");
                 continue;
             }
 
             var itemTree = itemCloneService.DeserializeItemTree(listing.ItemTreeJson);
             if (itemTree is null || itemTree.Count == 0)
             {
-                logger.Warning($"[TheQuartermaster] Skipping listing {listing.Id}: could not deserialize item tree.");
+                logger.Debug($"[TheQuartermaster] Skipping listing {listing.Id}: could not deserialize item tree.");
                 continue;
             }
 

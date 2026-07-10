@@ -81,7 +81,7 @@ public class MarketplaceWorkerService(
                 }
             }
 
-            logger.Info("[TheQuartermaster] Marketplace worker tick started.");
+            logger.Debug("[TheQuartermaster] Marketplace worker tick started.");
 
             await marketplaceService.CleanupExpiredListingsAsync();
             await marketplaceService.DeleteExpiredListingsAsync();
@@ -92,7 +92,7 @@ public class MarketplaceWorkerService(
                 await realtimeDatabaseService.ReleaseCatalogueLeaseAsync();
             }
 
-            logger.Info("[TheQuartermaster] Marketplace worker tick complete.");
+            logger.Debug("[TheQuartermaster] Marketplace worker tick complete.");
         }
         catch (Exception ex)
         {
