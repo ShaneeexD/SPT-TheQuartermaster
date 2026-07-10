@@ -131,17 +131,31 @@ public class RealtimeDatabaseService(
             return;
         }
 
-        try
+        const int MaxRetries = 3;
+        for (var attempt = 0; attempt < MaxRetries; attempt++)
         {
-            var meta = await GetCatalogueMetaAsync() ?? new RtdbCatalogueMeta();
-            meta.Version = GenerateCatalogueVersion();
-            meta.GeneratedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            await PutJsonAsync("meta/catalogue", meta);
-            logger.Debug($"[TheQuartermaster] Bumped catalogue version to {meta.Version}.");
-        }
-        catch (Exception ex)
-        {
-            logger.Error($"[TheQuartermaster] Failed to bump catalogue version: {ex.Message}", ex);
+            try
+            {
+                var (meta, etag) = await GetJsonWithEtagAsync<RtdbCatalogueMeta>("meta/catalogue");
+                meta ??= new RtdbCatalogueMeta();
+                meta.Version = GetNextCatalogueVersion(meta);
+                meta.GeneratedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+                if (!await PutJsonWithEtagAsync("meta/catalogue", meta, etag))
+                {
+                    logger.Debug($"[TheQuartermaster] Catalogue version bump conflicted (attempt {attempt + 1}); retrying.");
+                    await Task.Delay(50);
+                    continue;
+                }
+
+                logger.Debug($"[TheQuartermaster] Bumped catalogue version to {meta.Version}.");
+                return;
+            }
+            catch (Exception ex)
+            {
+                logger.Error($"[TheQuartermaster] Failed to bump catalogue version: {ex.Message}", ex);
+                return;
+            }
         }
     }
 
@@ -647,7 +661,7 @@ public class RealtimeDatabaseService(
             var version = meta?.Version ?? _cachedVersion;
             if (string.IsNullOrWhiteSpace(version))
             {
-                version = GenerateCatalogueVersion();
+                version = GetNextCatalogueVersion(meta);
             }
 
             if (meta is not null && !refreshed)
@@ -1074,9 +1088,22 @@ public class RealtimeDatabaseService(
         return Guid.NewGuid().ToString("N");
     }
 
-    private static string GenerateCatalogueVersion()
+    private static string GetNextCatalogueVersion(RtdbCatalogueMeta? currentMeta)
     {
-        return DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+        const int MaxVersion = 9999999;
+        var current = 0;
+        if (currentMeta is not null && !string.IsNullOrWhiteSpace(currentMeta.Version))
+        {
+            int.TryParse(currentMeta.Version, out current);
+        }
+
+        var next = current + 1;
+        if (next > MaxVersion)
+        {
+            next = 1;
+        }
+
+        return next.ToString();
     }
 
     private static string GetExpiryIndexPath(long expiresAtSeconds, string listingId)
