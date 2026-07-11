@@ -13,29 +13,68 @@ namespace TheQuartermaster.Server.Services.Contracts;
 [Injectable(InjectionType.Singleton)]
 public class WorkshopContractSyncService(
     ISptLogger<WorkshopContractSyncService> logger,
+    ConfigService configService,
     BackendConfigService backendConfigService,
     FirestoreContractService firestoreContractService
-)
+) : IDisposable
 {
     private readonly HttpClient _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+    private readonly SemaphoreSlim _semaphore = new(1, 1);
+    private Timer? _timer;
 
-    public async Task SyncAsync()
+    public void Start()
     {
-        var apiUrl = GetApiUrl();
-        if (string.IsNullOrWhiteSpace(apiUrl))
+        if (_timer is not null)
         {
-            logger.Info("[TheQuartermaster] Workshop sync disabled; no API URL configured.");
             return;
         }
 
-        if (!firestoreContractService.IsEnabled)
+        var interval = TimeSpan.FromMinutes(configService.Config.WorkshopSyncIntervalMinutes);
+        if (interval <= TimeSpan.Zero)
         {
-            logger.Warning("[TheQuartermaster] Workshop sync skipped; Firestore not available.");
+            interval = TimeSpan.FromMinutes(5);
+        }
+
+        logger.Info($"[TheQuartermaster] Starting workshop contract sync worker with interval {interval.TotalMinutes} minutes.");
+        _timer = new Timer(_ => _ = Task.Run(SyncAsync), null, TimeSpan.Zero, interval);
+    }
+
+    public void Stop()
+    {
+        _timer?.Dispose();
+        _timer = null;
+        logger.Info("[TheQuartermaster] Stopped workshop contract sync worker.");
+    }
+
+    public void Dispose()
+    {
+        Stop();
+        _semaphore.Dispose();
+    }
+
+    public async Task SyncAsync()
+    {
+        if (!await _semaphore.WaitAsync(0))
+        {
+            logger.Warning("[TheQuartermaster] Workshop sync already running; skipping.");
             return;
         }
 
         try
         {
+            var apiUrl = GetApiUrl();
+            if (string.IsNullOrWhiteSpace(apiUrl))
+            {
+                logger.Info("[TheQuartermaster] Workshop sync disabled; no API URL configured.");
+                return;
+            }
+
+            if (!firestoreContractService.IsEnabled)
+            {
+                logger.Warning("[TheQuartermaster] Workshop sync skipped; Firestore not available.");
+                return;
+            }
+
             logger.Info($"[TheQuartermaster] Syncing workshop contracts from {apiUrl}");
 
             var activeResponse = await FetchAsync(apiUrl, "active");
@@ -131,6 +170,10 @@ public class WorkshopContractSyncService(
         {
             logger.Error($"[TheQuartermaster] Workshop sync failed: {ex.Message}", ex);
         }
+        finally
+        {
+            _semaphore.Release();
+        }
     }
 
     private string? GetApiUrl()
@@ -193,11 +236,14 @@ public class WorkshopContractSyncService(
             RecurrenceType = GetString(element, "recurrence_type") ?? ContractRecurrenceType.OneTime,
             CreatedBy = GetString(element, "created_by") ?? string.Empty,
             AuthorUid = GetString(element, "author_uid") ?? string.Empty,
-            Source = "workshop",
+            Source = GetString(element, "source") ?? "workshop",
             AdminCreated = GetBool(element, "admin_created"),
             AdminFeatured = GetBool(element, "admin_featured"),
             AdminBlocked = false,
             SptVersion = GetString(element, "spt_version") ?? backendConfigService.Config.SptVersion,
+            IsNew = GetBool(element, "new"),
+            Keep = GetBool(element, "keep"),
+            ImageDataUrl = GetString(element, "image_data_url"),
             Objectives = MapObjectives(element),
             Rewards = MapRewards(element),
             Upvotes = GetInt(element, "upvotes") ?? 0,
@@ -432,6 +478,14 @@ public class WorkshopContractSyncService(
         if (!element.TryGetProperty(propertyName, out var property) || property.ValueKind == JsonValueKind.Null)
         {
             return null;
+        }
+
+        if (property.ValueKind == JsonValueKind.Object
+            && property.TryGetProperty("_seconds", out var secondsElement)
+            && secondsElement.TryGetInt64(out var seconds))
+        {
+            var nanoseconds = property.TryGetProperty("_nanoseconds", out var nanosecondsElement) && nanosecondsElement.TryGetInt32(out var nsValue) ? nsValue : 0;
+            return Timestamp.FromDateTime(DateTime.UnixEpoch.AddSeconds(seconds).AddTicks(nanoseconds / 100).ToUniversalTime());
         }
 
         if (property.ValueKind == JsonValueKind.Number)

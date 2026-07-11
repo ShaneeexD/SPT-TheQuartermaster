@@ -98,6 +98,10 @@ public class ContractSubmission
     [JsonPropertyName("updated_at")]
     public Timestamp? UpdatedAt { get; set; }
 
+    [FirestoreProperty("image_data_url")]
+    [JsonPropertyName("image_data_url")]
+    public string? ImageDataUrl { get; set; }
+
     [FirestoreProperty("validation_errors")]
     [JsonPropertyName("validation_errors")]
     public List<string> ValidationErrors { get; set; } = [];

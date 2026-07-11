@@ -50,6 +50,18 @@ public class ContractDefinition
     [JsonPropertyName("admin_blocked")]
     public bool AdminBlocked { get; set; }
 
+    [FirestoreProperty("new")]
+    [JsonPropertyName("new")]
+    public bool IsNew { get; set; }
+
+    [FirestoreProperty("keep")]
+    [JsonPropertyName("keep")]
+    public bool Keep { get; set; }
+
+    [FirestoreProperty("image_data_url")]
+    [JsonPropertyName("image_data_url")]
+    public string? ImageDataUrl { get; set; }
+
     [FirestoreProperty("spt_version")]
     [JsonPropertyName("spt_version")]
     public string SptVersion { get; set; } = "4.0.13";

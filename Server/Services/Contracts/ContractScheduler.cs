@@ -12,21 +12,69 @@ namespace TheQuartermaster.Server.Services.Contracts;
 [Injectable(InjectionType.Singleton)]
 public class ContractScheduler(
     ISptLogger<ContractScheduler> logger,
+    ConfigService configService,
     BackendConfigService backendConfigService,
     FirestoreContractService firestoreContractService
-)
+) : IDisposable
 {
-    public async Task TickAsync()
+    private readonly SemaphoreSlim _semaphore = new(1, 1);
+    private Timer? _timer;
+
+    public void Start()
     {
-        if (!backendConfigService.Config.CommunityContractsEnabled || !backendConfigService.Config.AllowAutoScheduling || !firestoreContractService.IsEnabled)
+        if (_timer is not null)
         {
             return;
         }
 
-        await MigrateEmptyQuestIdsAsync();
-        await ExpireActiveEntriesAsync();
-        await ActivateScheduledEntriesAsync();
-        await FillEmptySlotsAsync();
+        var interval = TimeSpan.FromMinutes(configService.Config.ContractSchedulerIntervalMinutes);
+        if (interval <= TimeSpan.Zero)
+        {
+            interval = TimeSpan.FromMinutes(5);
+        }
+
+        logger.Info($"[TheQuartermaster] Starting contract scheduler worker with interval {interval.TotalMinutes} minutes.");
+        _timer = new Timer(_ => _ = Task.Run(TickAsync), null, TimeSpan.Zero, interval);
+    }
+
+    public void Stop()
+    {
+        _timer?.Dispose();
+        _timer = null;
+        logger.Info("[TheQuartermaster] Stopped contract scheduler worker.");
+    }
+
+    public void Dispose()
+    {
+        Stop();
+        _semaphore.Dispose();
+    }
+
+    public async Task TickAsync()
+    {
+        if (!await _semaphore.WaitAsync(0))
+        {
+            logger.Warning("[TheQuartermaster] Contract scheduler tick already running; skipping.");
+            return;
+        }
+
+        try
+        {
+            if (!backendConfigService.Config.CommunityContractsEnabled || !backendConfigService.Config.AllowAutoScheduling || !firestoreContractService.IsEnabled)
+            {
+                return;
+            }
+
+            await MigrateEmptyQuestIdsAsync();
+            await ExpireActiveEntriesAsync();
+            await DeleteExpiredDefinitionsAsync();
+            await ActivateScheduledEntriesAsync();
+            await FillEmptySlotsAsync();
+        }
+        finally
+        {
+            _semaphore.Release();
+        }
     }
 
     private async Task MigrateEmptyQuestIdsAsync()
@@ -136,6 +184,40 @@ public class ContractScheduler(
         }
     }
 
+    private async Task DeleteExpiredDefinitionsAsync()
+    {
+        var expiredEntries = await firestoreContractService.GetScheduleEntriesAsync(ContractStatus.Expired);
+        var definitions = (await firestoreContractService.GetDefinitionsAsync())
+            .Where(d => !string.IsNullOrWhiteSpace(d.Id))
+            .ToDictionary(d => d.Id!, StringComparer.OrdinalIgnoreCase);
+
+        var cutoff = DateTime.UtcNow.AddDays(-7);
+        foreach (var entry in expiredEntries)
+        {
+            if (entry.ExpiredAt?.ToDateTime() > cutoff)
+            {
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(entry.ContractDefinitionId)
+                && definitions.TryGetValue(entry.ContractDefinitionId, out var definition)
+                && definition.Keep)
+            {
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(entry.ContractDefinitionId))
+            {
+                await firestoreContractService.DeleteDefinitionAsync(entry.ContractDefinitionId);
+            }
+
+            if (!string.IsNullOrWhiteSpace(entry.Id))
+            {
+                await firestoreContractService.DeleteScheduleEntryAsync(entry.Id);
+            }
+        }
+    }
+
     private async Task ActivateScheduledEntriesAsync()
     {
         var scheduled = await firestoreContractService.GetScheduledEntriesToActivateAsync();
@@ -213,6 +295,7 @@ public class ContractScheduler(
                 if (definition is not null)
                 {
                     definition.ActivatedAt = now;
+                    definition.IsNew = false;
                     await firestoreContractService.UpdateDefinitionAsync(definition);
                 }
 
@@ -284,22 +367,28 @@ public class ContractScheduler(
 
             while (activeCounts[recurrence] < maxSlots[recurrence])
             {
-                var pool = templates
+                var basePool = templates
                     .Where(t => string.Equals(t.RecurrenceType, recurrence, StringComparison.OrdinalIgnoreCase))
                     .Where(t => !activeDefinitionIds.Contains(t.Id!))
                     .Where(t => !activeContentHashes.Contains(templateHashes[t]))
                     .Where(t => backendConfigService.Config.AllowRepeatTemplates || !t.LastUsedAt.HasValue || t.LastUsedAt.Value.ToDateTime().Add(cooldown) <= now)
                     .ToList();
 
+                var newPool = basePool.Where(t => t.IsNew).ToList();
+                var pool = newPool.Count > 0 ? newPool : basePool;
+
                 if (pool.Count == 0)
                 {
                     if (backendConfigService.Config.AllowRepeatTemplates && activeDefinitionIds.Count < templates.Count)
                     {
-                        pool = templates
+                        var fallbackPool = templates
                             .Where(t => string.Equals(t.RecurrenceType, recurrence, StringComparison.OrdinalIgnoreCase))
                             .Where(t => !activeDefinitionIds.Contains(t.Id!))
                             .Where(t => !activeContentHashes.Contains(templateHashes[t]))
                             .ToList();
+
+                        var fallbackNewPool = fallbackPool.Where(t => t.IsNew).ToList();
+                        pool = fallbackNewPool.Count > 0 ? fallbackNewPool : fallbackPool;
                     }
 
                     if (pool.Count == 0)
@@ -310,6 +399,7 @@ public class ContractScheduler(
                 }
 
                 var template = pool[rng.Next(pool.Count)];
+                template.IsNew = false;
                 var end = now + TimeSpan.FromHours(durations[recurrence]);
                 var entry = new ContractScheduleEntry
                 {
@@ -327,7 +417,7 @@ public class ContractScheduler(
                     QuestId = GenerateQuestId()
                 };
 
-                var created = await firestoreContractService.CreateScheduleEntryAtomicAsync(entry, template, recurrence, maxSlots[recurrence]);
+                var created = await firestoreContractService.CreateScheduleEntryAsync(entry, template, recurrence, maxSlots[recurrence]);
                 if (created is null)
                 {
                     break;

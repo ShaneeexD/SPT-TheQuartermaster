@@ -52,6 +52,8 @@ public class QuartermasterPlugin(
     TraderRefreshPatch traderRefreshPatch,
     BackendConfigService backendConfigService,
     CommunityContractService communityContractService,
+    ContractScheduler contractScheduler,
+    WorkshopContractSyncService workshopContractSyncService,
     HttpResponseUtil httpResponseUtil
 ) : IOnLoad
 {
@@ -74,6 +76,8 @@ public class QuartermasterPlugin(
 
             await communityContractService.RefreshAsync();
             communityContractService.Start();
+            contractScheduler.Start();
+            workshopContractSyncService.Start();
             marketplaceWorkerService.Start();
 
             SellPatch.SetDependencies(

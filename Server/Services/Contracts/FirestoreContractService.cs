@@ -196,9 +196,12 @@ public class FirestoreContractService(
                 AdminCreated = submission.AdminCreated,
                 AdminFeatured = submission.AdminFeatured,
                 AdminBlocked = false,
+                IsNew = true,
+                Keep = false,
                 SptVersion = submission.SptVersion,
                 Objectives = submission.Objectives,
                 Rewards = submission.Rewards,
+                ImageDataUrl = submission.ImageDataUrl,
                 Upvotes = submission.Upvotes,
                 Downvotes = submission.Downvotes,
                 ApprovalRatio = submission.ApprovalRatio,
@@ -262,7 +265,7 @@ public class FirestoreContractService(
         }
     }
 
-    public async Task<ContractScheduleEntry?> CreateScheduleEntryAtomicAsync(ContractScheduleEntry entry, ContractDefinition definition, string recurrenceType, int maxSlots)
+    public async Task<ContractScheduleEntry?> CreateScheduleEntryAsync(ContractScheduleEntry entry, ContractDefinition definition, string recurrenceType, int maxSlots)
     {
         if (Db is null || string.IsNullOrWhiteSpace(definition.Id) || string.IsNullOrWhiteSpace(entry.ContractDefinitionId))
         {
@@ -274,49 +277,44 @@ public class FirestoreContractService(
             var scheduleCollection = Db.Collection(QuartermasterConstants.FirestoreCollections.ContractSchedule);
             var defRef = Db.Collection(QuartermasterConstants.FirestoreCollections.ContractDefinitions).Document(definition.Id);
 
-            var created = await Db.RunTransactionAsync(async transaction =>
+            var activeQuery = scheduleCollection
+                .WhereEqualTo("status", ContractStatus.Active)
+                .WhereEqualTo("recurrence_type", recurrenceType)
+                .Count();
+            var activeSnapshot = await activeQuery.GetSnapshotAsync();
+            if ((activeSnapshot.Count ?? 0) >= maxSlots)
             {
-                var activeQuery = scheduleCollection
-                    .WhereEqualTo("status", ContractStatus.Active)
-                    .WhereEqualTo("recurrence_type", recurrenceType)
-                    .Count();
-                var activeSnapshot = await transaction.GetSnapshotAsync(activeQuery);
-                if ((activeSnapshot.Count ?? 0) >= maxSlots)
-                {
-                    return null;
-                }
+                return null;
+            }
 
-                var duplicateQuery = scheduleCollection
-                    .WhereEqualTo("status", ContractStatus.Active)
-                    .WhereEqualTo("contract_definition_id", entry.ContractDefinitionId)
-                    .Count();
-                var duplicateSnapshot = await transaction.GetSnapshotAsync(duplicateQuery);
-                if ((duplicateSnapshot.Count ?? 0) > 0)
-                {
-                    return null;
-                }
+            var duplicateQuery = scheduleCollection
+                .WhereEqualTo("status", ContractStatus.Active)
+                .WhereEqualTo("contract_definition_id", entry.ContractDefinitionId)
+                .Count();
+            var duplicateSnapshot = await duplicateQuery.GetSnapshotAsync();
+            if ((duplicateSnapshot.Count ?? 0) > 0)
+            {
+                return null;
+            }
 
-                var docRef = scheduleCollection.Document();
-                entry.Id = docRef.Id;
-                transaction.Set(docRef, entry);
+            var docRef = scheduleCollection.Document();
+            entry.Id = docRef.Id;
+            await docRef.SetAsync(entry);
 
-                definition.LastUsedAt = entry.StartAt;
-                definition.ScheduledStartAt = entry.StartAt;
-                definition.ScheduledEndAt = entry.EndAt;
-                transaction.Set(defRef, definition, SetOptions.MergeAll);
-
-                return entry;
-            });
+            definition.LastUsedAt = entry.StartAt;
+            definition.ScheduledStartAt = entry.StartAt;
+            definition.ScheduledEndAt = entry.EndAt;
+            await defRef.SetAsync(definition, SetOptions.MergeAll);
 
             InvalidateDefinitionsCache();
             InvalidateScheduleEntriesCache();
             await BumpContractVersionAsync();
 
-            return created;
+            return entry;
         }
         catch (Exception ex)
         {
-            logger.Error($"[TheQuartermaster] Failed to atomically create schedule entry for {definition.Id}: {ex.Message}", ex);
+            logger.Error($"[TheQuartermaster] Failed to create schedule entry for {definition.Id}: {ex.Message}", ex);
             return null;
         }
     }
@@ -399,6 +397,48 @@ public class FirestoreContractService(
         {
             logger.Error($"[TheQuartermaster] Failed to update contract definition {definition.Id}: {ex.Message}", ex);
             return null;
+        }
+    }
+
+    public async Task<bool> DeleteDefinitionAsync(string definitionId)
+    {
+        if (Db is null || string.IsNullOrWhiteSpace(definitionId))
+        {
+            return false;
+        }
+
+        try
+        {
+            await Db.Collection(QuartermasterConstants.FirestoreCollections.ContractDefinitions).Document(definitionId).DeleteAsync();
+            InvalidateDefinitionsCache();
+            await BumpContractVersionAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Failed to delete contract definition {definitionId}: {ex.Message}", ex);
+            return false;
+        }
+    }
+
+    public async Task<bool> DeleteScheduleEntryAsync(string entryId)
+    {
+        if (Db is null || string.IsNullOrWhiteSpace(entryId))
+        {
+            return false;
+        }
+
+        try
+        {
+            await Db.Collection(QuartermasterConstants.FirestoreCollections.ContractSchedule).Document(entryId).DeleteAsync();
+            InvalidateScheduleEntriesCache();
+            await BumpContractVersionAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Failed to delete schedule entry {entryId}: {ex.Message}", ex);
+            return false;
         }
     }
 

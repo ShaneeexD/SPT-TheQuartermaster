@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using SPTarkov.Server.Core.Helpers;
 using SPTarkov.Server.Core.Models.Common;
 using SPTarkov.Server.Core.Models.Enums;
+using SPTarkov.Server.Core.Routers;
 using TheQuartermaster.Server.Models.Contracts;
 
 namespace TheQuartermaster.Server.Services.Contracts;
@@ -54,7 +55,8 @@ public static class ContractQuestBuilder
         string traderId,
         List<ContractScheduleEntry> activeEntries,
         Dictionary<string, ContractDefinition> definitionsById,
-        ItemHelper itemHelper
+        ItemHelper itemHelper,
+        ImageRouter? imageRouter = null
     )
     {
         if (activeEntries.Count == 0)
@@ -76,6 +78,7 @@ public static class ContractQuestBuilder
         {
             GenerateDefaultQuestIcon(defaultIconPath);
         }
+        imageRouter?.AddRoute(DefaultQuestIconRoute, defaultIconPath);
 
         var allQuests = new JsonObject();
         var allLocales = new JsonObject
@@ -95,6 +98,7 @@ public static class ContractQuestBuilder
                 ? entry.QuestId
                 : DeriveQuestId(entry.Id!);
             var quest = BuildQuest(questId, definition, entry, allLocales, itemHelper);
+            quest["image"] = ResolveQuestImage(questId, definition, imagesDir, imageRouter);
             allQuests[questId] = quest;
             count++;
         }
@@ -212,7 +216,7 @@ public static class ContractQuestBuilder
             case ContractObjectiveType.HandOverItem:
             case ContractObjectiveType.HandOverFirItem:
                 var handover = BuildHandoverCondition(objective, condId, objective.Type == ContractObjectiveType.HandOverFirItem, itemHelper);
-                locales[condId] = objective.Description;
+                locales[condId] = GetObjectiveDescription(objective, itemHelper);
                 yield return handover;
                 break;
 
@@ -220,17 +224,95 @@ public static class ContractQuestBuilder
             case ContractObjectiveType.KillPmcs:
             case ContractObjectiveType.KillBoss:
                 var kill = BuildKillCondition(objective, condId, counterId);
-                locales[condId] = objective.Description;
+                locales[condId] = GetObjectiveDescription(objective, itemHelper);
                 yield return kill;
                 break;
 
             case ContractObjectiveType.SurviveMap:
             case ContractObjectiveType.ExtractMap:
                 var survive = BuildSurviveCondition(objective, condId, counterId);
-                locales[condId] = objective.Description;
+                locales[condId] = GetObjectiveDescription(objective, itemHelper);
                 yield return survive;
                 break;
         }
+    }
+
+    private static string GetObjectiveDescription(ContractObjective objective, ItemHelper itemHelper)
+    {
+        if (!string.IsNullOrWhiteSpace(objective.Description))
+        {
+            return objective.Description;
+        }
+
+        var mapSuffix = string.IsNullOrWhiteSpace(objective.TargetMap) || string.Equals(objective.TargetMap, "any", StringComparison.OrdinalIgnoreCase)
+            ? ""
+            : $" on {ToDisplayName(objective.TargetMap)}";
+
+        switch (objective.Type)
+        {
+            case ContractObjectiveType.HandOverItem:
+            case ContractObjectiveType.HandOverFirItem:
+                var itemName = GetItemName(objective.TargetTpl, itemHelper);
+                var firText = objective.Type == ContractObjectiveType.HandOverFirItem ? " (Found in Raid)" : "";
+                return $"Hand over {objective.Count}x {itemName}{firText}";
+
+            case ContractObjectiveType.KillScavs:
+                return $"Eliminate {objective.Count} Scavs{mapSuffix}";
+
+            case ContractObjectiveType.KillPmcs:
+                return $"Eliminate {objective.Count} PMCs{mapSuffix}";
+
+            case ContractObjectiveType.KillBoss:
+                var bossName = ToBossDisplayName(objective.TargetFaction);
+                return $"Eliminate {objective.Count} {bossName}{mapSuffix}";
+
+            case ContractObjectiveType.SurviveMap:
+                var surviveExtract = string.IsNullOrWhiteSpace(objective.TargetZone) ? "" : $" via {objective.TargetZone}";
+                return $"Survive and extract from {ToDisplayName(objective.TargetMap)}{surviveExtract}";
+
+            case ContractObjectiveType.ExtractMap:
+                var extract = string.IsNullOrWhiteSpace(objective.TargetZone) ? "" : $" via {objective.TargetZone}";
+                return $"Extract from {ToDisplayName(objective.TargetMap)}{extract}";
+
+            default:
+                return objective.Description;
+        }
+    }
+
+    private static string ToDisplayName(string? location)
+    {
+        if (string.IsNullOrWhiteSpace(location))
+        {
+            return "Tarkov";
+        }
+
+        return DisplayNames.TryGetValue(location, out var display) ? display : location;
+    }
+
+    private static string ToBossDisplayName(string? faction)
+    {
+        if (string.IsNullOrWhiteSpace(faction))
+        {
+            return "boss";
+        }
+
+        return faction.ToLowerInvariant() switch
+        {
+            "bossbully" => "Reshala",
+            "bosskilla" => "Killa",
+            "bosskojaniy" => "Shturman",
+            "bosssanitar" => "Sanitar",
+            "bosstagilla" => "Tagilla",
+            "bossgluhar" => "Gluhar",
+            "bosszryachiy" => "Zryachiy",
+            "bossboar" => "Kaban",
+            "bosspartisan" => "Partisan",
+            "bosskolontay" => "Kolontay",
+            "bossknight" => "Knight",
+            "sectantpriest" => "Cultist Priest",
+            "sectantwarrior" => "Cultist Warrior",
+            _ => faction
+        };
     }
 
     private static JsonObject BuildHandoverCondition(ContractObjective objective, string condId, bool foundInRaid, ItemHelper itemHelper)
@@ -560,5 +642,40 @@ public static class ContractQuestBuilder
         ];
 
         File.WriteAllBytes(path, pngBytes);
+    }
+
+    private const string DefaultQuestIconRoute = "/files/quest/icon/default_quest_icon.png";
+
+    private static string ResolveQuestImage(string questId, ContractDefinition definition, string imagesDir, ImageRouter? imageRouter)
+    {
+        if (string.IsNullOrWhiteSpace(definition.ImageDataUrl))
+        {
+            return DefaultQuestIconRoute;
+        }
+
+        var match = System.Text.RegularExpressions.Regex.Match(definition.ImageDataUrl, @"^data:image/(?<type>\w+);base64,(?<data>.+)$");
+        if (!match.Success)
+        {
+            return DefaultQuestIconRoute;
+        }
+
+        var imageType = match.Groups["type"].Value.ToLowerInvariant();
+        var extension = imageType == "jpeg" || imageType == "jpg" ? ".jpg" : ".png";
+        var fileName = $"quest_{questId}{extension}";
+        var absPath = Path.Combine(imagesDir, fileName);
+
+        try
+        {
+            var bytes = Convert.FromBase64String(match.Groups["data"].Value);
+            File.WriteAllBytes(absPath, bytes);
+
+            var routePath = $"/files/quest/icon/quest_{questId}";
+            imageRouter?.AddRoute(routePath, absPath);
+            return routePath;
+        }
+        catch
+        {
+            return DefaultQuestIconRoute;
+        }
     }
 }
