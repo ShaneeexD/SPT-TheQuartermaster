@@ -8,7 +8,8 @@ public class MarketplaceWorkerService(
     ISptLogger<MarketplaceWorkerService> logger,
     ConfigService configService,
     MarketplaceService marketplaceService,
-    RealtimeDatabaseService realtimeDatabaseService
+    RealtimeDatabaseService realtimeDatabaseService,
+    ItemOverrideService itemOverrideService
 )
 {
     private readonly SemaphoreSlim _semaphore = new(1, 1);
@@ -70,6 +71,7 @@ public class MarketplaceWorkerService(
 
             logger.Debug("[TheQuartermaster] Marketplace worker tick started.");
 
+            await itemOverrideService.RefreshAsync();
             await marketplaceService.CleanupExpiredListingsAsync();
             await marketplaceService.DeleteExpiredListingsAsync();
             await marketplaceService.RebuildCatalogueAsync();

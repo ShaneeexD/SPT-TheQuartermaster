@@ -32,6 +32,8 @@ public class SellPatch : AbstractPatch
     private static PaymentService? _paymentService;
     private static QuestHelper? _questHelper;
     private static TqmServices.TraderService? _traderService;
+    private static ItemOverrideService? _itemOverrideService;
+    private static ItemHelper? _itemHelper;
     private static ISptLogger<SellPatch>? _logger;
     private static HttpResponseUtil? _httpResponseUtil;
 
@@ -45,6 +47,8 @@ public class SellPatch : AbstractPatch
         PaymentService paymentService,
         QuestHelper questHelper,
         TqmServices.TraderService traderService,
+        ItemOverrideService itemOverrideService,
+        ItemHelper itemHelper,
         ISptLogger<SellPatch> logger,
         HttpResponseUtil httpResponseUtil
     )
@@ -58,6 +62,8 @@ public class SellPatch : AbstractPatch
         _paymentService = paymentService;
         _questHelper = questHelper;
         _traderService = traderService;
+        _itemOverrideService = itemOverrideService;
+        _itemHelper = itemHelper;
         _logger = logger;
         _httpResponseUtil = httpResponseUtil;
     }
@@ -108,6 +114,8 @@ public class SellPatch : AbstractPatch
 
             const string pattern = @"\s+";
             var uploaded = 0;
+            var totalComputedPrice = 0L;
+            var buyMultiplier = _traderService?.GetBuyPriceMultiplier() ?? 0.6;
 
             foreach (var itemToBeRemoved in sellRequest.Items ?? new List<SoldItem>())
             {
@@ -123,6 +131,20 @@ public class SellPatch : AbstractPatch
                 if (itemTree is null || !itemTree.Any())
                 {
                     continue;
+                }
+
+                foreach (var item in itemTree)
+                {
+                    var quantity = (int)(item.Upd?.StackObjectsCount ?? 1);
+                    var tpl = item.Template.ToString();
+                    if (_itemOverrideService?.TryGetPrice(tpl, out var overridePrice, out _) == true)
+                    {
+                        totalComputedPrice += overridePrice * quantity;
+                    }
+                    else if (_itemHelper is not null)
+                    {
+                        totalComputedPrice += (long)(_itemHelper.GetStaticItemPrice(item.Template) * buyMultiplier * quantity);
+                    }
                 }
 
                 var serialized = _itemCloneService?.SerializeItemTree(itemTree);
@@ -176,6 +198,12 @@ public class SellPatch : AbstractPatch
             }
 
             _logger?.Info($"[TheQuartermaster] Uploaded {uploaded} listing(s) from player {sessionID}.");
+
+            if (totalComputedPrice > 0 && sellRequest.Price != (int)totalComputedPrice)
+            {
+                _logger?.Info($"[TheQuartermaster] Overriding sell-to-trader price from {sellRequest.Price} to {totalComputedPrice}.");
+                sellRequest.Price = (int)totalComputedPrice;
+            }
 
             _paymentService?.GiveProfileMoney(profileToReceiveMoney, sellRequest.Price, sellRequest, output, sessionID);
 

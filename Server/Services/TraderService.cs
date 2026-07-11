@@ -1,5 +1,6 @@
 using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.Models.Common;
+using SPTarkov.Server.Core.Models.Eft.Common;
 using SPTarkov.Server.Core.Models.Eft.Common.Tables;
 using SPTarkov.Server.Core.Models.Enums;
 using SPTarkov.Server.Core.Models.Spt.Config;
@@ -22,6 +23,7 @@ public class TraderService(
     MarketplaceService marketplaceService,
     ItemHelper itemHelper,
     DatabaseService databaseService,
+    ProfileHelper profileHelper,
     ConfigServer configServer,
     ItemCloneService itemCloneService,
     ImageRouter? imageRouter = null
@@ -121,6 +123,17 @@ public class TraderService(
         return GetStackInfoForAssortItem(assortItemId)?.BuyRestrictionMax;
     }
 
+    public double GetBuyPriceMultiplier()
+    {
+        if (_trader is null)
+        {
+            return 0.6;
+        }
+
+        var coefficient = (_trader.Base.LoyaltyLevels ?? []).FirstOrDefault()?.BuyPriceCoefficient ?? 40;
+        return (100 - coefficient) / 100.0;
+    }
+
     public QuartermasterListing? GetListing(string? listingId)
     {
         if (string.IsNullOrWhiteSpace(listingId))
@@ -184,7 +197,40 @@ public class TraderService(
                     MinLevel = 1,
                     MinSalesSum = 0,
                     MinStanding = 0,
-                    BuyPriceCoefficient = 10,
+                    BuyPriceCoefficient = 45,
+                    InsurancePriceCoefficient = 1,
+                    RepairPriceCoefficient = 1,
+                    ExchangePriceCoefficient = 1,
+                    HealPriceCoefficient = 1
+                },
+                new TraderLoyaltyLevel
+                {
+                    MinLevel = 15,
+                    MinSalesSum = 2000000,
+                    MinStanding = 0,
+                    BuyPriceCoefficient = 45,
+                    InsurancePriceCoefficient = 1,
+                    RepairPriceCoefficient = 1,
+                    ExchangePriceCoefficient = 1,
+                    HealPriceCoefficient = 1
+                },
+                new TraderLoyaltyLevel
+                {
+                    MinLevel = 30,
+                    MinSalesSum = 18000000,
+                    MinStanding = 0,
+                    BuyPriceCoefficient = 45,
+                    InsurancePriceCoefficient = 1,
+                    RepairPriceCoefficient = 1,
+                    ExchangePriceCoefficient = 1,
+                    HealPriceCoefficient = 1
+                },
+                new TraderLoyaltyLevel
+                {
+                    MinLevel = 45,
+                    MinSalesSum = 30000000,
+                    MinStanding = 0,
+                    BuyPriceCoefficient = 45,
                     InsurancePriceCoefficient = 1,
                     RepairPriceCoefficient = 1,
                     ExchangePriceCoefficient = 1,
@@ -240,7 +286,7 @@ public class TraderService(
         };
     }
 
-    public async Task RefreshAssort()
+    public async Task RefreshAssort(MongoId? sessionId = null)
     {
         if (!configService.Config.ModEnabled)
         {
@@ -268,14 +314,15 @@ public class TraderService(
             logger.Info($"[TheQuartermaster] Loaded {_activeListings.Count} active listings into trader assortment.");
         }
 
-        var newAssort = BuildAssort();
+        var (markup, loyaltyLevel) = ResolveMarkupAndLevel(sessionId);
+        var newAssort = BuildAssort(markup, loyaltyLevel);
         _trader.Assort = newAssort;
         _trader.Base.NextResupply = (int)DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 1;
 
         logger.Info($"[TheQuartermaster] Assort refreshed with {newAssort.Items.Count} items.");
     }
 
-    private TraderAssort BuildAssort()
+    private TraderAssort BuildAssort(double markup, int loyaltyLevel)
     {
         var assort = new TraderAssort
         {
@@ -327,7 +374,7 @@ public class TraderService(
             {
                 if (chunk.Count > 0 && chunkCount + entry.Quantity > QuartermasterConstants.Marketplace.MaxAssortStackSize)
                 {
-                    AddMergedStack(assort, chunk, chunkCount);
+                    AddMergedStack(assort, chunk, chunkCount, markup, loyaltyLevel);
                     chunk.Clear();
                     chunkCount = 0;
                 }
@@ -338,13 +385,13 @@ public class TraderService(
 
             if (chunk.Count > 0)
             {
-                AddMergedStack(assort, chunk, chunkCount);
+                AddMergedStack(assort, chunk, chunkCount, markup, loyaltyLevel);
             }
         }
 
         foreach (var entry in processed.Where(p => !p.IsStackable))
         {
-            AddSingleItem(assort, entry);
+            AddSingleItem(assort, entry, markup, loyaltyLevel);
         }
 
         return assort;
@@ -361,7 +408,7 @@ public class TraderService(
         return template?.Properties?.StackMaxSize > 1;
     }
 
-    private void AddMergedStack(TraderAssort assort, List<ProcessedListing> listings, int totalQuantity)
+    private void AddMergedStack(TraderAssort assort, List<ProcessedListing> listings, int totalQuantity, double markup, int loyaltyLevel)
     {
         var representative = listings[0];
         var clonedTree = itemCloneService.CloneAndRemap(representative.ItemTree);
@@ -382,18 +429,17 @@ public class TraderService(
         root.Upd.BuyRestrictionCurrent = 0;
 
         assort.Items.AddRange(clonedTree);
-        var handbookPrice = itemHelper.GetStaticItemPrice(root.Template);
-        var sellPrice = Math.Max(1, (int)Math.Round(handbookPrice * 1.05 * totalQuantity));
+        var sellPrice = Math.Max(1, (int)Math.Round(GetItemTreeHandbookPrice(clonedTree) * markup));
         assort.BarterScheme[assortItemId] =
         [
             [new BarterScheme { Template = Money.ROUBLES, Count = sellPrice }]
         ];
-        assort.LoyalLevelItems[assortItemId] = 1;
+        assort.LoyalLevelItems[assortItemId] = loyaltyLevel;
 
         logger.Info($"[TheQuartermaster] Merged {listings.Count} listings of {representative.Listing!.RootTpl} into stack of {totalQuantity}.");
     }
 
-    private void AddSingleItem(TraderAssort assort, ProcessedListing entry)
+    private void AddSingleItem(TraderAssort assort, ProcessedListing entry, double markup, int loyaltyLevel)
     {
         var clonedTree = itemCloneService.CloneAndRemap(entry.ItemTree);
         var root = clonedTree[0];
@@ -414,13 +460,86 @@ public class TraderService(
         root.Upd.BuyRestrictionCurrent = 0;
 
         assort.Items.AddRange(clonedTree);
-        var handbookPrice = itemHelper.GetStaticItemPrice(root.Template);
-        var sellPrice = Math.Max(1, (int)Math.Round(handbookPrice * 1.05 * entry.Quantity));
+        var sellPrice = Math.Max(1, (int)Math.Round(GetItemTreeHandbookPrice(clonedTree) * markup));
         assort.BarterScheme[assortItemId] =
         [
             [new BarterScheme { Template = Money.ROUBLES, Count = sellPrice }]
         ];
-        assort.LoyalLevelItems[assortItemId] = 1;
+        assort.LoyalLevelItems[assortItemId] = loyaltyLevel;
+    }
+
+    private long GetItemTreeHandbookPrice(List<Item> tree)
+    {
+        var total = 0L;
+        foreach (var item in tree)
+        {
+            var quantity = item.Upd?.StackObjectsCount ?? 1;
+            total += (long)(itemHelper.GetStaticItemPrice(item.Template) * quantity);
+        }
+
+        return total;
+    }
+
+    private (double Markup, int LoyaltyLevel) ResolveMarkupAndLevel(MongoId? sessionId)
+    {
+        if (!sessionId.HasValue || _trader is null)
+        {
+            return (1.05, 1);
+        }
+
+        try
+        {
+            var pmc = profileHelper.GetPmcProfile(sessionId.Value);
+            if (pmc?.Info is null)
+            {
+                return (1.05, 1);
+            }
+
+            var level = GetCurrentLoyaltyLevel(pmc);
+            var markup = level switch
+            {
+                4 => 1.02,
+                3 => 1.03,
+                2 => 1.04,
+                _ => 1.05
+            };
+
+            return (markup, level);
+        }
+        catch (Exception ex)
+        {
+            logger.Warning($"[TheQuartermaster] Could not resolve loyalty level for {sessionId}: {ex.Message}");
+            return (1.05, 1);
+        }
+    }
+
+    private int GetCurrentLoyaltyLevel(PmcData pmc)
+    {
+        if (_trader is null)
+        {
+            return 1;
+        }
+
+        var levels = _trader.Base.LoyaltyLevels ?? [];
+        var salesSum = 0L;
+        var standing = 0.0;
+        if (pmc.TradersInfo is not null && pmc.TradersInfo.TryGetValue(QuartermasterConstants.TraderId, out var traderInfo))
+        {
+            salesSum = (long)(traderInfo.SalesSum ?? 0);
+            standing = traderInfo.Standing ?? 0;
+        }
+
+        var playerLevel = pmc.Info?.Level ?? 0;
+        for (var i = levels.Count - 1; i >= 0; i--)
+        {
+            var req = levels[i];
+            if (playerLevel >= (req.MinLevel ?? 0) && salesSum >= (req.MinSalesSum ?? 0) && standing >= (req.MinStanding ?? 0))
+            {
+                return i + 1;
+            }
+        }
+
+        return 1;
     }
 
     private void AddTraderLocales(TraderBase traderBase)

@@ -72,7 +72,8 @@ public static class ContractQuestBuilder
         Directory.CreateDirectory(localesDir);
         Directory.CreateDirectory(imagesDir);
 
-        var sourceQuestIcon = Path.GetFullPath(Path.Combine(outputBaseDir, "..", "Assets", "quest.png"));
+        var modPath = Path.GetFullPath(Path.Combine(outputBaseDir, "..", ".."));
+        var sourceQuestIcon = Path.Combine(modPath, "Assets", "quest.png");
         var defaultIconPath = Path.Combine(imagesDir, "quest.png");
         if (File.Exists(sourceQuestIcon))
         {

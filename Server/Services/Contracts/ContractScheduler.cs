@@ -343,14 +343,8 @@ public class ContractScheduler(
         {
             [ContractRecurrenceType.Daily] = backendConfigService.Config.MaxActiveDailyContracts,
             [ContractRecurrenceType.Weekly] = backendConfigService.Config.MaxActiveWeeklyContracts,
-            [ContractRecurrenceType.Weekend] = backendConfigService.Config.MaxActiveSpecialContracts
-        };
-
-        var durations = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
-        {
-            [ContractRecurrenceType.Daily] = backendConfigService.Config.DailyContractDurationHours,
-            [ContractRecurrenceType.Weekly] = backendConfigService.Config.WeeklyContractDurationHours,
-            [ContractRecurrenceType.Weekend] = backendConfigService.Config.WeeklyContractDurationHours
+            [ContractRecurrenceType.Weekend] = backendConfigService.Config.MaxActiveSpecialContracts,
+            [ContractRecurrenceType.OneTime] = backendConfigService.Config.MaxActiveSpecialContracts
         };
 
         var templates = await firestoreContractService.GetApprovedTemplatesAsync();
@@ -361,81 +355,162 @@ public class ContractScheduler(
 
         var templateHashes = templates.ToDictionary(t => t, ComputeContentHash);
         var now = DateTime.UtcNow;
-        var nowTs = Timestamp.FromDateTime(now.ToUniversalTime());
         var cooldown = TimeSpan.FromDays(backendConfigService.Config.CommunityContractCooldownDays);
         var rng = new Random();
 
+        var allScheduleEntries = await firestoreContractService.GetScheduleEntriesAsync();
+
         foreach (var recurrence in maxSlots.Keys)
         {
-            if (string.Equals(recurrence, ContractRecurrenceType.OneTime, StringComparison.OrdinalIgnoreCase))
+            if (activeCounts[recurrence] >= maxSlots[recurrence])
             {
                 continue;
             }
 
-            while (activeCounts[recurrence] < maxSlots[recurrence])
+            DateTime windowStartUtc;
+            DateTime windowEndUtc;
+            if (string.Equals(recurrence, ContractRecurrenceType.OneTime, StringComparison.OrdinalIgnoreCase))
             {
-                var basePool = templates
-                    .Where(t => string.Equals(t.RecurrenceType, recurrence, StringComparison.OrdinalIgnoreCase))
-                    .Where(t => !activeDefinitionIds.Contains(t.Id!))
-                    .Where(t => !activeContentHashes.Contains(templateHashes[t]))
-                    .Where(t => backendConfigService.Config.AllowRepeatTemplates || !t.LastUsedAt.HasValue || t.LastUsedAt.Value.ToDateTime().Add(cooldown) <= now)
-                    .ToList();
+                windowStartUtc = now;
+                windowEndUtc = now.AddDays(1);
+            }
+            else
+            {
+                (windowStartUtc, windowEndUtc) = GetRecurrenceWindow(recurrence, now);
+            }
+            var existingForWindow = allScheduleEntries.Any(e =>
+                string.Equals(e.RecurrenceType, recurrence, StringComparison.OrdinalIgnoreCase) &&
+                e.StartAt?.ToDateTime() >= windowStartUtc.AddMinutes(-1) &&
+                e.StartAt?.ToDateTime() <= windowEndUtc.AddMinutes(1));
 
-                var newPool = basePool.Where(t => t.IsNew).ToList();
-                var pool = newPool.Count > 0 ? newPool : basePool;
+            if (existingForWindow)
+            {
+                logger.Debug($"[TheQuartermaster] {recurrence} window already has a schedule entry; skipping.");
+                continue;
+            }
+
+            var basePool = templates
+                .Where(t => string.Equals(t.RecurrenceType, recurrence, StringComparison.OrdinalIgnoreCase))
+                .Where(t => !activeDefinitionIds.Contains(t.Id!))
+                .Where(t => !activeContentHashes.Contains(templateHashes[t]))
+                .Where(t => backendConfigService.Config.AllowRepeatTemplates || !t.LastUsedAt.HasValue || t.LastUsedAt.Value.ToDateTime().Add(cooldown) <= now)
+                .ToList();
+
+            var newPool = basePool.Where(t => t.IsNew).ToList();
+            var pool = newPool.Count > 0 ? newPool : basePool;
+
+            if (pool.Count == 0)
+            {
+                if (backendConfigService.Config.AllowRepeatTemplates && activeDefinitionIds.Count < templates.Count)
+                {
+                    var fallbackPool = templates
+                        .Where(t => string.Equals(t.RecurrenceType, recurrence, StringComparison.OrdinalIgnoreCase))
+                        .Where(t => !activeDefinitionIds.Contains(t.Id!))
+                        .Where(t => !activeContentHashes.Contains(templateHashes[t]))
+                        .ToList();
+
+                    var fallbackNewPool = fallbackPool.Where(t => t.IsNew).ToList();
+                    pool = fallbackNewPool.Count > 0 ? fallbackNewPool : fallbackPool;
+                }
 
                 if (pool.Count == 0)
                 {
-                    if (backendConfigService.Config.AllowRepeatTemplates && activeDefinitionIds.Count < templates.Count)
-                    {
-                        var fallbackPool = templates
-                            .Where(t => string.Equals(t.RecurrenceType, recurrence, StringComparison.OrdinalIgnoreCase))
-                            .Where(t => !activeDefinitionIds.Contains(t.Id!))
-                            .Where(t => !activeContentHashes.Contains(templateHashes[t]))
-                            .ToList();
-
-                        var fallbackNewPool = fallbackPool.Where(t => t.IsNew).ToList();
-                        pool = fallbackNewPool.Count > 0 ? fallbackNewPool : fallbackPool;
-                    }
-
-                    if (pool.Count == 0)
-                    {
-                        logger.Warning($"[TheQuartermaster] No available templates for {recurrence} slot (cooldown active, none of matching recurrence, all matching definitions active, or content already active in another slot).");
-                        break;
-                    }
+                    logger.Warning($"[TheQuartermaster] No available templates for {recurrence} slot (cooldown active, none of matching recurrence, all matching definitions active, or content already active in another slot).");
+                    continue;
                 }
+            }
 
-                var template = pool[rng.Next(pool.Count)];
-                template.IsNew = false;
-                var end = now + TimeSpan.FromHours(durations[recurrence]);
-                var entry = new ContractScheduleEntry
-                {
-                    ContractDefinitionId = template.Id!,
-                    TemplateId = template.Id!,
-                    Status = ContractStatus.Active,
-                    RecurrenceType = recurrence,
-                    ActivationSource = "automatic",
-                    StartAt = nowTs,
-                    EndAt = Timestamp.FromDateTime(end.ToUniversalTime()),
-                    ActivatedAt = nowTs,
-                    ExpiresAt = Timestamp.FromDateTime(end.ToUniversalTime()),
-                    AdminCreated = template.AdminCreated,
-                    CreatedAt = nowTs,
-                    QuestId = GenerateQuestId()
-                };
+            var template = pool[rng.Next(pool.Count)];
+            template.IsNew = false;
+            var startTs = Timestamp.FromDateTime(windowStartUtc.ToUniversalTime());
+            var endTs = Timestamp.FromDateTime(windowEndUtc.ToUniversalTime());
+            var entry = new ContractScheduleEntry
+            {
+                ContractDefinitionId = template.Id!,
+                TemplateId = template.Id!,
+                Status = ContractStatus.Scheduled,
+                RecurrenceType = recurrence,
+                ActivationSource = "automatic",
+                StartAt = startTs,
+                EndAt = endTs,
+                ActivatedAt = startTs,
+                ExpiresAt = endTs,
+                AdminCreated = template.AdminCreated,
+                CreatedAt = Timestamp.FromDateTime(now.ToUniversalTime()),
+                QuestId = GenerateQuestId()
+            };
 
-                var created = await firestoreContractService.CreateScheduleEntryAsync(entry, template, recurrence, maxSlots[recurrence]);
-                if (created is null)
-                {
-                    break;
-                }
+            var created = await firestoreContractService.CreateScheduleEntryAsync(entry, template, recurrence, maxSlots[recurrence]);
+            if (created is null)
+            {
+                continue;
+            }
 
-                activeDefinitionIds.Add(template.Id!);
-                activeContentHashes.Add(templateHashes[template]);
-                activeCounts[recurrence]++;
-                logger.Info($"[TheQuartermaster] Filled {recurrence} slot with template {template.Id}.");
+            activeDefinitionIds.Add(template.Id!);
+            activeContentHashes.Add(templateHashes[template]);
+            activeCounts[recurrence]++;
+            logger.Info($"[TheQuartermaster] Filled {recurrence} slot with template {template.Id} for window {windowStartUtc:O} to {windowEndUtc:O}.");
+        }
+    }
+
+    private static (DateTime StartUtc, DateTime EndUtc) GetRecurrenceWindow(string recurrenceType, DateTime utcNow)
+    {
+        var tz = GetLondonTimeZone();
+        var londonNow = TimeZoneInfo.ConvertTimeFromUtc(utcNow, tz);
+
+        DateTime start;
+        DateTime end;
+        if (string.Equals(recurrenceType, ContractRecurrenceType.Daily, StringComparison.OrdinalIgnoreCase))
+        {
+            start = new DateTime(londonNow.Year, londonNow.Month, londonNow.Day, 0, 0, 0, DateTimeKind.Unspecified);
+            end = start.AddDays(1);
+        }
+        else if (string.Equals(recurrenceType, ContractRecurrenceType.Weekly, StringComparison.OrdinalIgnoreCase))
+        {
+            var daysSinceMonday = ((int)londonNow.DayOfWeek + 6) % 7;
+            start = new DateTime(londonNow.Year, londonNow.Month, londonNow.Day, 0, 1, 0, DateTimeKind.Unspecified).AddDays(-daysSinceMonday);
+            end = start.AddDays(4).AddMinutes(-1);
+            if (londonNow >= end)
+            {
+                start = start.AddDays(7);
+                end = end.AddDays(7);
             }
         }
+        else if (string.Equals(recurrenceType, ContractRecurrenceType.Weekend, StringComparison.OrdinalIgnoreCase))
+        {
+            var daysSinceFriday = ((int)londonNow.DayOfWeek + 2) % 7;
+            start = new DateTime(londonNow.Year, londonNow.Month, londonNow.Day, 17, 0, 0, DateTimeKind.Unspecified).AddDays(-daysSinceFriday);
+            end = start.AddDays(3).AddHours(7).AddMinutes(1);
+            if (londonNow >= end)
+            {
+                start = start.AddDays(7);
+                end = end.AddDays(7);
+                }
+        }
+        else
+        {
+            start = londonNow;
+            end = start.AddDays(1);
+        }
+
+        return (TimeZoneInfo.ConvertTimeToUtc(start, tz), TimeZoneInfo.ConvertTimeToUtc(end, tz));
+    }
+
+    private static TimeZoneInfo GetLondonTimeZone()
+    {
+        foreach (var id in new[] { "GMT Standard Time", "Europe/London", "Europe/Belfast" })
+        {
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById(id);
+            }
+            catch (TimeZoneNotFoundException)
+            {
+                // try next id
+            }
+        }
+
+        return TimeZoneInfo.Utc;
     }
 
     private async Task<ContractDefinition?> GetDefinitionForUpdateAsync(string definitionId)

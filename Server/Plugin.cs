@@ -47,6 +47,8 @@ public class QuartermasterPlugin(
     TraderService traderService,
     PaymentService paymentService,
     QuestHelper questHelper,
+    ItemOverrideService itemOverrideService,
+    ItemHelper itemHelper,
     SellPatch sellPatch,
     BuyPatch buyPatch,
     TraderRefreshPatch traderRefreshPatch,
@@ -110,6 +112,8 @@ public class QuartermasterPlugin(
                 paymentService,
                 questHelper,
                 traderService,
+                itemOverrideService,
+                itemHelper,
                 sellPatchLogger,
                 httpResponseUtil
             );

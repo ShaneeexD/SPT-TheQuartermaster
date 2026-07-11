@@ -39,7 +39,7 @@ public class TraderRefreshPatch : AbstractPatch
             return;
         }
 
-        _traderService?.RefreshAssort().GetAwaiter().GetResult();
+        _traderService?.RefreshAssort(sessionId).GetAwaiter().GetResult();
         _communityContractService?.RefreshAsync().GetAwaiter().GetResult();
     }
 }
