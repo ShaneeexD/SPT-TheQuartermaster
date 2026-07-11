@@ -10,6 +10,10 @@ public class ContractRewards
     [JsonPropertyName("roubles")]
     public int Roubles { get; set; }
 
+    [FirestoreProperty("money")]
+    [JsonPropertyName("money")]
+    public MoneyReward? Money { get; set; }
+
     [FirestoreProperty("experience")]
     [JsonPropertyName("experience")]
     public int Experience { get; set; }
@@ -21,6 +25,18 @@ public class ContractRewards
     [FirestoreProperty("trader_standing")]
     [JsonPropertyName("trader_standing")]
     public double TraderStanding { get; set; }
+}
+
+[FirestoreData]
+public class MoneyReward
+{
+    [FirestoreProperty("currency")]
+    [JsonPropertyName("currency")]
+    public string Currency { get; set; } = "RUB";
+
+    [FirestoreProperty("amount")]
+    [JsonPropertyName("amount")]
+    public int Amount { get; set; }
 }
 
 [FirestoreData]

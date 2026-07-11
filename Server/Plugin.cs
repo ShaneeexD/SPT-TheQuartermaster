@@ -74,7 +74,27 @@ public class QuartermasterPlugin(
             await backendConfigService.LoadAsync();
             await traderService.RegisterTrader(_modPath);
 
-            await communityContractService.RefreshAsync();
+            // Initial population: pull approved contracts from the workshop, schedule active slots,
+            // then inject the resulting quests before the first profile loads.
+            try
+            {
+                await workshopContractSyncService.SyncAsync();
+            }
+            catch (Exception ex)
+            {
+                logger.Warning($"[TheQuartermaster] Initial workshop sync failed: {ex.Message}");
+            }
+
+            try
+            {
+                await contractScheduler.TickAsync();
+            }
+            catch (Exception ex)
+            {
+                logger.Warning($"[TheQuartermaster] Initial scheduler tick failed: {ex.Message}");
+            }
+
+            await communityContractService.RefreshAsync(force: true);
             communityContractService.Start();
             contractScheduler.Start();
             workshopContractSyncService.Start();

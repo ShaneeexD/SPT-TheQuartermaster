@@ -232,6 +232,9 @@ public class WorkshopContractSyncService(
             Id = id,
             Title = GetString(element, "title") ?? string.Empty,
             Description = GetString(element, "description") ?? string.Empty,
+            StartedMessage = GetString(element, "started_message") ?? string.Empty,
+            SuccessMessage = GetString(element, "success_message") ?? string.Empty,
+            FailMessage = GetString(element, "fail_message") ?? string.Empty,
             Status = GetString(element, "status") ?? ContractStatus.Approved,
             RecurrenceType = GetString(element, "recurrence_type") ?? ContractRecurrenceType.OneTime,
             CreatedBy = GetString(element, "created_by") ?? string.Empty,
@@ -305,6 +308,9 @@ public class WorkshopContractSyncService(
             Id = id,
             Title = GetString(element, "title") ?? string.Empty,
             Description = GetString(element, "description") ?? string.Empty,
+            StartedMessage = GetString(element, "started_message") ?? string.Empty,
+            SuccessMessage = GetString(element, "success_message") ?? string.Empty,
+            FailMessage = GetString(element, "fail_message") ?? string.Empty,
             CreatedBy = GetString(element, "created_by") ?? string.Empty,
             AuthorUid = GetString(element, "author_uid") ?? string.Empty,
             Source = "workshop",
@@ -380,6 +386,15 @@ public class WorkshopContractSyncService(
         rewards.Roubles = GetInt(rewardsElement, "roubles") ?? 0;
         rewards.Experience = GetInt(rewardsElement, "experience") ?? 0;
         rewards.TraderStanding = GetDouble(rewardsElement, "trader_standing");
+
+        if (rewardsElement.TryGetProperty("money", out var moneyElement) && moneyElement.ValueKind == JsonValueKind.Object)
+        {
+            rewards.Money = new MoneyReward
+            {
+                Currency = GetString(moneyElement, "currency") ?? "RUB",
+                Amount = GetInt(moneyElement, "amount") ?? 0
+            };
+        }
 
         if (rewardsElement.TryGetProperty("items", out var itemsElement) && itemsElement.ValueKind == JsonValueKind.Array)
         {

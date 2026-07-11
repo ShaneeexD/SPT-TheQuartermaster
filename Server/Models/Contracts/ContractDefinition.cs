@@ -18,6 +18,18 @@ public class ContractDefinition
     [JsonPropertyName("description")]
     public string Description { get; set; } = string.Empty;
 
+    [FirestoreProperty("started_message")]
+    [JsonPropertyName("started_message")]
+    public string StartedMessage { get; set; } = string.Empty;
+
+    [FirestoreProperty("success_message")]
+    [JsonPropertyName("success_message")]
+    public string SuccessMessage { get; set; } = string.Empty;
+
+    [FirestoreProperty("fail_message")]
+    [JsonPropertyName("fail_message")]
+    public string FailMessage { get; set; } = string.Empty;
+
     [FirestoreProperty("status")]
     [JsonPropertyName("status")]
     public string Status { get; set; } = ContractStatus.Draft;

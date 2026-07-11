@@ -188,6 +188,9 @@ public class FirestoreContractService(
             {
                 Title = submission.Title,
                 Description = submission.Description,
+                StartedMessage = submission.StartedMessage,
+                SuccessMessage = submission.SuccessMessage,
+                FailMessage = submission.FailMessage,
                 Status = status,
                 RecurrenceType = submission.RecurrenceType,
                 CreatedBy = submission.CreatedBy,

@@ -194,12 +194,14 @@ public class ContractScheduler(
         var cutoff = DateTime.UtcNow.AddDays(-7);
         foreach (var entry in expiredEntries)
         {
-            if (entry.ExpiredAt?.ToDateTime() > cutoff)
+            var isOneTime = string.Equals(entry.RecurrenceType, ContractRecurrenceType.OneTime, StringComparison.OrdinalIgnoreCase);
+            if (entry.ExpiredAt?.ToDateTime() > cutoff && !isOneTime)
             {
                 continue;
             }
 
-            if (!string.IsNullOrWhiteSpace(entry.ContractDefinitionId)
+            if (!isOneTime
+                && !string.IsNullOrWhiteSpace(entry.ContractDefinitionId)
                 && definitions.TryGetValue(entry.ContractDefinitionId, out var definition)
                 && definition.Keep)
             {

@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -5,7 +6,6 @@ using System.Text.Json.Nodes;
 using SPTarkov.Server.Core.Helpers;
 using SPTarkov.Server.Core.Models.Common;
 using SPTarkov.Server.Core.Models.Enums;
-using SPTarkov.Server.Core.Routers;
 using TheQuartermaster.Server.Models.Contracts;
 
 namespace TheQuartermaster.Server.Services.Contracts;
@@ -55,8 +55,7 @@ public static class ContractQuestBuilder
         string traderId,
         List<ContractScheduleEntry> activeEntries,
         Dictionary<string, ContractDefinition> definitionsById,
-        ItemHelper itemHelper,
-        ImageRouter? imageRouter = null
+        ItemHelper itemHelper
     )
     {
         if (activeEntries.Count == 0)
@@ -78,7 +77,6 @@ public static class ContractQuestBuilder
         {
             GenerateDefaultQuestIcon(defaultIconPath);
         }
-        imageRouter?.AddRoute(DefaultQuestIconRoute, defaultIconPath);
 
         var allQuests = new JsonObject();
         var allLocales = new JsonObject
@@ -98,7 +96,7 @@ public static class ContractQuestBuilder
                 ? entry.QuestId
                 : DeriveQuestId(entry.Id!);
             var quest = BuildQuest(questId, definition, entry, allLocales, itemHelper);
-            quest["image"] = ResolveQuestImage(questId, definition, imagesDir, imageRouter);
+            quest["image"] = ResolveQuestImage(questId, definition, imagesDir);
             allQuests[questId] = quest;
             count++;
         }
@@ -120,6 +118,8 @@ public static class ContractQuestBuilder
     {
         var questType = DetermineQuestType(definition.Objectives);
         var location = ResolveQuestLocation(definition.Objectives);
+        var recurrencePrefix = GetRecurrencePrefix(entry.RecurrenceType);
+        var questTitle = $"{recurrencePrefix}{definition.Title}";
 
         var startConditions = new JsonArray
         {
@@ -152,16 +152,27 @@ public static class ContractQuestBuilder
 
         var successRewards = BuildRewards(definition.Rewards, questId);
 
-        locales[$"{questId} name"] = definition.Title;
+        var startedMessage = string.IsNullOrWhiteSpace(definition.StartedMessage)
+            ? $"Contract accepted: {questTitle}"
+            : definition.StartedMessage;
+        var successMessage = string.IsNullOrWhiteSpace(definition.SuccessMessage)
+            ? $"Contract complete: {questTitle}"
+            : definition.SuccessMessage;
+        var failMessage = string.IsNullOrWhiteSpace(definition.FailMessage)
+            ? string.Empty
+            : definition.FailMessage;
+
+        locales[$"{questId} name"] = questTitle;
         locales[$"{questId} description"] = definition.Description;
-        locales[$"{questId} successMessageText"] = $"Contract complete: {definition.Title}";
-        locales[$"{questId} startedMessageText"] = $"Contract accepted: {definition.Title}";
-        locales[$"{questId} acceptPlayerMessage"] = $"Contract accepted: {definition.Title}";
-        locales[$"{questId} completePlayerMessage"] = $"Contract complete: {definition.Title}";
+        locales[$"{questId} successMessageText"] = successMessage;
+        locales[$"{questId} startedMessageText"] = startedMessage;
+        locales[$"{questId} failMessageText"] = failMessage;
+        locales[$"{questId} acceptPlayerMessage"] = startedMessage;
+        locales[$"{questId} completePlayerMessage"] = successMessage;
 
         return new JsonObject
         {
-            ["QuestName"] = definition.Title,
+            ["QuestName"] = questTitle,
             ["_id"] = questId,
             ["traderId"] = QuartermasterConstants.TraderId.ToString(),
             ["type"] = questType,
@@ -482,8 +493,13 @@ public static class ContractQuestBuilder
             });
         }
 
-        if (rewards.Roubles > 0)
+        var moneyReward = rewards.Money is { Amount: > 0 }
+            ? rewards.Money
+            : (rewards.Roubles > 0 ? new MoneyReward { Currency = "RUB", Amount = rewards.Roubles } : null);
+
+        if (moneyReward is not null)
         {
+            var moneyTpl = ResolveMoneyTemplateId(moneyReward.Currency);
             var moneyItemId = GenerateId();
             result.Add(new JsonObject
             {
@@ -496,13 +512,13 @@ public static class ContractQuestBuilder
                     new JsonObject
                     {
                         ["_id"] = moneyItemId,
-                        ["_tpl"] = Money.ROUBLES.ToString(),
-                        ["upd"] = new JsonObject { ["StackObjectsCount"] = rewards.Roubles }
+                        ["_tpl"] = moneyTpl,
+                        ["upd"] = new JsonObject { ["StackObjectsCount"] = moneyReward.Amount }
                     }
                 },
                 ["target"] = moneyItemId,
                 ["type"] = "Item",
-                ["value"] = rewards.Roubles.ToString(),
+                ["value"] = moneyReward.Amount.ToString(),
                 ["unknown"] = false
             });
         }
@@ -626,37 +642,51 @@ public static class ContractQuestBuilder
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
-    private static void GenerateDefaultQuestIcon(string path)
-    {
-        byte[] pngBytes =
-        [
-            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
-            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
-            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-            0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
-            0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41,
-            0x54, 0x78, 0x9C, 0x62, 0x00, 0x00, 0x00, 0x02,
-            0x00, 0x01, 0xE5, 0x27, 0xDE, 0xFC, 0x00, 0x00,
-            0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42,
-            0x60, 0x82
-        ];
+    private const string DefaultQuestIconName = "default_quest_icon";
 
-        File.WriteAllBytes(path, pngBytes);
+    private static string GetRecurrencePrefix(string recurrenceType)
+    {
+        if (string.Equals(recurrenceType, ContractRecurrenceType.Daily, StringComparison.OrdinalIgnoreCase))
+        {
+            return "[DAILY] ";
+        }
+        if (string.Equals(recurrenceType, ContractRecurrenceType.Weekly, StringComparison.OrdinalIgnoreCase))
+        {
+            return "[WEEKLY] ";
+        }
+        if (string.Equals(recurrenceType, ContractRecurrenceType.Weekend, StringComparison.OrdinalIgnoreCase))
+        {
+            return "[WEEKEND] ";
+        }
+        if (string.Equals(recurrenceType, ContractRecurrenceType.OneTime, StringComparison.OrdinalIgnoreCase))
+        {
+            return "[ONE TIME] ";
+        }
+        return string.Empty;
     }
 
-    private const string DefaultQuestIconRoute = "/files/quest/icon/default_quest_icon.png";
+    private static string ResolveMoneyTemplateId(string currency)
+    {
+        var upper = currency?.ToUpperInvariant() ?? "RUB";
+        return upper switch
+        {
+            "USD" or "DOLLARS" or "DOLLAR" => "5696686a4bdc2da3298b456a",
+            "EUR" or "EUROS" or "EURO" => "569668774bdc2da2298b4568",
+            _ => Money.ROUBLES.ToString()
+        };
+    }
 
-    private static string ResolveQuestImage(string questId, ContractDefinition definition, string imagesDir, ImageRouter? imageRouter)
+    private static string ResolveQuestImage(string questId, ContractDefinition definition, string imagesDir)
     {
         if (string.IsNullOrWhiteSpace(definition.ImageDataUrl))
         {
-            return DefaultQuestIconRoute;
+            return DefaultQuestIconName;
         }
 
         var match = System.Text.RegularExpressions.Regex.Match(definition.ImageDataUrl, @"^data:image/(?<type>\w+);base64,(?<data>.+)$");
         if (!match.Success)
         {
-            return DefaultQuestIconRoute;
+            return DefaultQuestIconName;
         }
 
         var imageType = match.Groups["type"].Value.ToLowerInvariant();
@@ -669,13 +699,124 @@ public static class ContractQuestBuilder
             var bytes = Convert.FromBase64String(match.Groups["data"].Value);
             File.WriteAllBytes(absPath, bytes);
 
-            var routePath = $"/files/quest/icon/quest_{questId}";
-            imageRouter?.AddRoute(routePath, absPath);
-            return routePath;
+            return fileName;
         }
         catch
         {
-            return DefaultQuestIconRoute;
+            return DefaultQuestIconName;
+        }
+    }
+
+    private static void GenerateDefaultQuestIcon(string path)
+    {
+        // 64x64 opaque blue placeholder so it isn't a blank 1x1 pixel.
+        File.WriteAllBytes(path, CreateSolidPng(64, 64, 0x00, 0x80, 0xFF, 0xFF));
+    }
+
+    private static byte[] CreateSolidPng(int width, int height, byte r, byte g, byte b, byte a)
+    {
+        var output = new MemoryStream();
+
+        // PNG signature.
+        ReadOnlySpan<byte> signature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        output.Write(signature);
+
+        // IHDR
+        var ihdr = new byte[13];
+        WriteBigEndian(ihdr, 0, width);
+        WriteBigEndian(ihdr, 4, height);
+        ihdr[8] = 8;   // bit depth
+        ihdr[9] = 6;   // colour type RGBA
+        ihdr[10] = 0;  // compression
+        ihdr[11] = 0;  // filter
+        ihdr[12] = 0;  // interlace
+        WritePngChunk(output, "IHDR", ihdr);
+
+        // Raw image data: one filter byte per row then RGBA pixels.
+        var rowSize = 1 + width * 4;
+        var raw = new byte[height * rowSize];
+        for (var y = 0; y < height; y++)
+        {
+            var rowStart = y * rowSize;
+            raw[rowStart] = 0; // filter: None
+            for (var x = 0; x < width; x++)
+            {
+                var idx = rowStart + 1 + x * 4;
+                raw[idx] = r;
+                raw[idx + 1] = g;
+                raw[idx + 2] = b;
+                raw[idx + 3] = a;
+            }
+        }
+
+        // IDAT (zlib compressed)
+        using var idat = new MemoryStream();
+        using (var zlib = new ZLibStream(idat, CompressionLevel.Optimal, true))
+        {
+            zlib.Write(raw);
+        }
+        WritePngChunk(output, "IDAT", idat.ToArray());
+
+        // IEND
+        WritePngChunk(output, "IEND", Array.Empty<byte>());
+
+        return output.ToArray();
+    }
+
+    private static void WritePngChunk(Stream stream, string type, byte[] data)
+    {
+        var typeBytes = Encoding.ASCII.GetBytes(type);
+        WriteBigEndian(stream, data.Length);
+        stream.Write(typeBytes);
+        stream.Write(data);
+        WriteBigEndian(stream, (int)Crc32.Compute(typeBytes, data));
+    }
+
+    private static void WriteBigEndian(byte[] buffer, int offset, int value)
+    {
+        buffer[offset] = (byte)(value >> 24);
+        buffer[offset + 1] = (byte)(value >> 16);
+        buffer[offset + 2] = (byte)(value >> 8);
+        buffer[offset + 3] = (byte)value;
+    }
+
+    private static void WriteBigEndian(Stream stream, int value)
+    {
+        stream.WriteByte((byte)(value >> 24));
+        stream.WriteByte((byte)(value >> 16));
+        stream.WriteByte((byte)(value >> 8));
+        stream.WriteByte((byte)value);
+    }
+
+    private static class Crc32
+    {
+        private static readonly uint[] Table = new uint[256];
+
+        static Crc32()
+        {
+            for (uint i = 0; i < 256; i++)
+            {
+                var c = i;
+                for (var j = 0; j < 8; j++)
+                {
+                    c = (c & 1) == 1 ? (0xEDB88320 ^ (c >> 1)) : (c >> 1);
+                }
+                Table[i] = c;
+            }
+        }
+
+        public static uint Compute(byte[] type, byte[] data)
+        {
+            var c = 0xFFFFFFFF;
+            foreach (var b in type)
+            {
+                c = Table[(c ^ b) & 0xFF] ^ (c >> 8);
+            }
+            foreach (var b in data)
+            {
+                c = Table[(c ^ b) & 0xFF] ^ (c >> 8);
+            }
+            return c ^ 0xFFFFFFFF;
         }
     }
 }

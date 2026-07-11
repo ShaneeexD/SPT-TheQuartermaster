@@ -2,7 +2,6 @@ using System.Reflection;
 using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.Helpers;
 using SPTarkov.Server.Core.Models.Utils;
-using SPTarkov.Server.Core.Routers;
 using TheQuartermaster.Server.Models.Contracts;
 namespace TheQuartermaster.Server.Services.Contracts;
 
@@ -11,8 +10,7 @@ public class ContractInjectionService(
     ISptLogger<ContractInjectionService> logger,
     WTTServerCommonLib.WTTServerCommonLib wttCommon,
     ItemHelper itemHelper,
-    ModHelper modHelper,
-    ImageRouter? imageRouter = null
+    ModHelper modHelper
 )
 {
     private const string QuestFolderName = "db/CommunityQuests";
@@ -49,8 +47,7 @@ public class ContractInjectionService(
             traderId,
             activeEntries,
             definitionsById,
-            itemHelper,
-            imageRouter
+            itemHelper
         );
 
         logger.Info($"[TheQuartermaster] Built {count} community quest file(s) for trader {traderId}.");

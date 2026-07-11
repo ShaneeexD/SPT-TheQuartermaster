@@ -126,6 +126,16 @@ public class ContractValidationService(
             errors.Add("Rouble reward cannot be negative.");
         }
 
+        if (rewards.Money?.Amount < 0)
+        {
+            errors.Add("Money reward amount cannot be negative.");
+        }
+
+        if (rewards.Money?.Amount > QuartermasterConstants.Marketplace.MaxPrice)
+        {
+            errors.Add($"Money reward exceeds maximum of {QuartermasterConstants.Marketplace.MaxPrice}.");
+        }
+
         if (rewards.Experience < 0)
         {
             errors.Add("Experience reward cannot be negative.");
@@ -146,10 +156,10 @@ public class ContractValidationService(
             errors.Add("Trader standing reward must be between 0.0 and 1.0.");
         }
 
-        var totalRewardValue = rewards.Roubles + rewards.Experience * 100;
+        var totalRewardValue = rewards.Roubles + (rewards.Money?.Amount ?? 0) + rewards.Experience * 100;
         if (totalRewardValue > MaxTotalRewardValue)
         {
-            errors.Add("Total reward value (roubles + XP*100) is unreasonably high.");
+            errors.Add("Total reward value (roubles + money + XP*100) is unreasonably high.");
         }
 
         if (rewards.Items is not null)
