@@ -31,7 +31,7 @@ When it's gone, it's gone.
 ## Features
 
 - **Global listings** – Items you sell are uploaded to a shared Firestore database and appear for everyone running the mod.
-- **Dynamic pricing** – Assortment items are priced at handbook value plus a configurable markup, with durability and quality taken into account.
+- **Dynamic pricing** – Assortment items are priced at handbook value minus 10% plus a 5% markup, with durability and quality taken into account, markup decreases with higher loyalty level down to 2%.
 - **Server-side only** – No client mod or prepatcher required.
 
 ## Community Contracts
@@ -57,33 +57,6 @@ Miss the window, and the opportunity is gone.
 2. Extract the `SPT` folder into your SPT install directory.
 3. Launch the SPT server.
 4. The Quartermaster will appear in the trader list. Click **Refresh** on his page if his assortment is empty.
-
-
-## Configuration
-
-Edit `user/mods/TheQuartermaster/config/config.json` to change the mod's behavior.
-
-| Setting | Default | Description |
-|---|---|---|
-| `modEnabled` | `true` | Enable or disable the mod locally. |
-| `uploadConsent` | `true` | Allow your server to upload listings to the shared database. |
-| `allowCommunityContracts` | `true` | Show community-submitted contracts in your client. |
-| `allowAdminContracts` | `true` | Show admin-created contracts in your client. |
-| `enableDistributedWorker` | `true` | Enable the timer-driven community contract scheduler. |
-| `workerIntervalMinutes` | `5` | How often the contract scheduler runs. |
-| `firebaseProjectId` | `""` | The Mod's Firebase project ID (public client). |
-| `firebaseApiKey` | `""` | The Mod's Firebase public Web API key for anonymous auth. |
-| `firebaseAuthDomain` | `""` | The Mod's Firebase auth domain. |
-
-### Backend Configuration
-
-Additional runtime settings are stored in the `quartermaster_config/contract_config` Firestore document and can be edited from the **Settings** tab of the Quartermaster Admin Panel.
-
-| Setting | Default | Description |
-|---|---|---|
-| `workshop_sync_enabled` | `true` | Pull community contracts from the website API into the mod database. |
-| `workshop_api_url` | `https://serenity-workshop.netlify.app/api/contract-list` | The website API endpoint to sync contracts from. |
-
 
 ## Credits
 
