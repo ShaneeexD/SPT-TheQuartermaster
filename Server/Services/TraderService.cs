@@ -184,7 +184,7 @@ public class TraderService(
                     MinLevel = 1,
                     MinSalesSum = 0,
                     MinStanding = 0,
-                    BuyPriceCoefficient = 1.0,
+                    BuyPriceCoefficient = 0.9,
                     InsurancePriceCoefficient = 1,
                     RepairPriceCoefficient = 1,
                     ExchangePriceCoefficient = 1,
@@ -382,9 +382,11 @@ public class TraderService(
         root.Upd.BuyRestrictionCurrent = 0;
 
         assort.Items.AddRange(clonedTree);
+        var handbookPrice = itemHelper.GetStaticItemPrice(root.Template);
+        var sellPrice = Math.Max(1, (int)Math.Round(handbookPrice * 1.05 * totalQuantity));
         assort.BarterScheme[assortItemId] =
         [
-            [new BarterScheme { Template = Money.ROUBLES, Count = representative.Listing!.MarketPrice }]
+            [new BarterScheme { Template = Money.ROUBLES, Count = sellPrice }]
         ];
         assort.LoyalLevelItems[assortItemId] = 1;
 
@@ -412,9 +414,11 @@ public class TraderService(
         root.Upd.BuyRestrictionCurrent = 0;
 
         assort.Items.AddRange(clonedTree);
+        var handbookPrice = itemHelper.GetStaticItemPrice(root.Template);
+        var sellPrice = Math.Max(1, (int)Math.Round(handbookPrice * 1.05 * entry.Quantity));
         assort.BarterScheme[assortItemId] =
         [
-            [new BarterScheme { Template = Money.ROUBLES, Count = entry.Listing!.MarketPrice }]
+            [new BarterScheme { Template = Money.ROUBLES, Count = sellPrice }]
         ];
         assort.LoyalLevelItems[assortItemId] = 1;
     }
@@ -446,7 +450,7 @@ public class TraderService(
             return;
         }
 
-        var avatarPath = System.IO.Path.Combine(modPath, "db", "avatar.jpg");
+        var avatarPath = System.IO.Path.Combine(modPath, "Assets", "trader.png");
         if (File.Exists(avatarPath))
         {
             var routePath = $"/files/trader/avatar/{traderBase.Id}";

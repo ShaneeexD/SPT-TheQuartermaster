@@ -72,8 +72,13 @@ public static class ContractQuestBuilder
         Directory.CreateDirectory(localesDir);
         Directory.CreateDirectory(imagesDir);
 
-        var defaultIconPath = Path.Combine(imagesDir, "default_quest_icon.png");
-        if (!File.Exists(defaultIconPath))
+        var sourceQuestIcon = Path.GetFullPath(Path.Combine(outputBaseDir, "..", "Assets", "quest.png"));
+        var defaultIconPath = Path.Combine(imagesDir, "quest.png");
+        if (File.Exists(sourceQuestIcon))
+        {
+            File.Copy(sourceQuestIcon, defaultIconPath, true);
+        }
+        else if (!File.Exists(defaultIconPath))
         {
             GenerateDefaultQuestIcon(defaultIconPath);
         }
@@ -96,7 +101,7 @@ public static class ContractQuestBuilder
                 ? entry.QuestId
                 : DeriveQuestId(entry.Id!);
             var quest = BuildQuest(questId, definition, entry, allLocales, itemHelper);
-            quest["image"] = ResolveQuestImage(questId, definition, imagesDir);
+            quest["image"] = "quest.png";
             allQuests[questId] = quest;
             count++;
         }

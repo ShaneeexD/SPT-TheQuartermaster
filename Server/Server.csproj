@@ -29,6 +29,7 @@
     <None Include="config\config.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="package.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="config\firebase-adminsdk.json" CopyToOutputDirectory="Never" />
+    <None Include="Assets\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -105,10 +106,12 @@
       <OutputFiles Include="$(OutputPath)runtimes\**\*" />
       <ConfigFiles Include="$(OutputPath)config\**\*" />
       <DbFiles Include="$(OutputPath)db\**\*" />
+      <AssetFiles Include="$(OutputPath)Assets\**\*" />
     </ItemGroup>
     <Copy SourceFiles="@(OutputFiles)" DestinationFiles="@(OutputFiles->'$(ProjectDir)Build\SPT\user\mods\TheQuartermaster\%(RecursiveDir)%(Filename)%(Extension)')" />
     <Copy SourceFiles="@(ConfigFiles)" DestinationFiles="@(ConfigFiles->'$(ProjectDir)Build\SPT\user\mods\TheQuartermaster\config\%(RecursiveDir)%(Filename)%(Extension)')" />
     <Copy SourceFiles="@(DbFiles)" DestinationFiles="@(DbFiles->'$(ProjectDir)Build\SPT\user\mods\TheQuartermaster\db\%(RecursiveDir)%(Filename)%(Extension)')" />
+    <Copy SourceFiles="@(AssetFiles)" DestinationFiles="@(AssetFiles->'$(ProjectDir)Build\SPT\user\mods\TheQuartermaster\Assets\%(RecursiveDir)%(Filename)%(Extension)')" />
     <Copy SourceFiles="$(ProjectDir)package.json" DestinationFolder="$(ProjectDir)Build\SPT\user\mods\TheQuartermaster" />
   </Target>
 </Project>
