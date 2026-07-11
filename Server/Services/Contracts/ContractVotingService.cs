@@ -1,3 +1,4 @@
+using Google.Cloud.Firestore;
 using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.Models.Utils;
 using TheQuartermaster.Server.Models;
@@ -73,7 +74,16 @@ public class ContractVotingService(
             return;
         }
 
-        if (submission.VotingEndsAt is null || submission.VotingEndsAt.Value.ToDateTime() > DateTime.UtcNow)
+        var now = DateTime.UtcNow;
+        var submittedAt = submission.SubmittedAt?.ToDateTime() ?? now;
+        var baseDeadline = submittedAt.AddHours(backendConfigService.Config.VotingHours);
+
+        // Use the stored deadline only if it has been extended by the mod past the base deadline.
+        var effectiveDeadline = submission.VotingEndsAt.HasValue && submission.VotingEndsAt.Value.ToDateTime() > baseDeadline
+            ? submission.VotingEndsAt.Value.ToDateTime()
+            : baseDeadline;
+
+        if (now < effectiveDeadline)
         {
             // Voting still open
             return;
@@ -82,8 +92,10 @@ public class ContractVotingService(
         var totalVotes = submission.Upvotes + submission.Downvotes;
         var minVotes = backendConfigService.Config.MinimumVotes;
         var approvalPct = backendConfigService.Config.ApprovalPercentage;
+        var maxVotingDuration = TimeSpan.FromHours(48);
+        var elapsed = now - submittedAt;
 
-        if (submission.Upvotes + submission.Downvotes >= minVotes && submission.ApprovalRatio >= approvalPct)
+        if (totalVotes >= minVotes && submission.ApprovalRatio >= approvalPct)
         {
             var definition = await firestoreContractService.CreateDefinitionFromSubmissionAsync(submission);
             if (definition is not null)
@@ -95,6 +107,21 @@ public class ContractVotingService(
             submission.Status = ContractStatus.Approved;
             await firestoreContractService.UpdateSubmissionAsync(submission);
             logger.DebugInfo($"[TheQuartermaster] Community contract approved: {submission.Title} (ratio {submission.ApprovalRatio:F1}%, {totalVotes} votes).");
+        }
+        else if (totalVotes < minVotes && submission.ApprovalRatio > approvalPct && elapsed < maxVotingDuration)
+        {
+            var extension = TimeSpan.FromHours(6);
+            var newDeadline = now + extension;
+            var maxDeadline = submittedAt + maxVotingDuration;
+
+            if (newDeadline > maxDeadline)
+            {
+                newDeadline = maxDeadline;
+            }
+
+            submission.VotingEndsAt = Timestamp.FromDateTime(newDeadline.ToUniversalTime());
+            await firestoreContractService.UpdateSubmissionAsync(submission);
+            logger.DebugInfo($"[TheQuartermaster] Voting extended for {submission.Title} until {newDeadline:O} ({totalVotes}/{minVotes} votes, {submission.ApprovalRatio:F1}% approval).");
         }
         else
         {
