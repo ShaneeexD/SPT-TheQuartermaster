@@ -68,6 +68,7 @@ You can submit and view community made contracts on my [website](https://serenit
 - New quests are added to the trader every Day/Week/Weekend, and if high quality, will be kept in the rotating pool.
 - One time quests can also be submitted, these will then be deleted after they expire (24 hours).
 - When new quests are added, it requires a game restart for it to be injected into your local database.
+- Brand new quests are prioritised over quests that have already been used before, this is to ensure that it stays fresh and only repeats quests when new ones are not available.
 
 ## Credits
 
