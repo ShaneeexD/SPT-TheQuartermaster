@@ -22,7 +22,7 @@ public record QuartermasterConfig
     public bool EnableDistributedWorker { get; set; } = true;
 
     [JsonIgnore]
-    public int WorkerIntervalMinutes { get; set; } = 5;
+    public int WorkerIntervalMinutes { get; set; } = 60;
 
     [JsonIgnore]
     public int CommunityContractIntervalMinutes { get; set; } = 15;

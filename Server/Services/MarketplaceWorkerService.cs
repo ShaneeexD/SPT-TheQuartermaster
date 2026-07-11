@@ -26,7 +26,7 @@ public class MarketplaceWorkerService(
         var interval = TimeSpan.FromMinutes(configService.Config.WorkerIntervalMinutes);
         if (interval <= TimeSpan.Zero)
         {
-            interval = TimeSpan.FromMinutes(5);
+            interval = TimeSpan.FromMinutes(60);
         }
 
         logger.DebugInfo($"[TheQuartermaster] Starting marketplace worker with interval {interval.TotalMinutes} minutes.");
@@ -74,7 +74,6 @@ public class MarketplaceWorkerService(
             await itemOverrideService.RefreshAsync();
             await marketplaceService.CleanupExpiredListingsAsync();
             await marketplaceService.DeleteExpiredListingsAsync();
-            await marketplaceService.RebuildCatalogueAsync();
 
             await realtimeDatabaseService.ReleaseCatalogueLeaseAsync();
 
