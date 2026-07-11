@@ -143,6 +143,11 @@ public class ContractScheduler(
             Rewards = new
             {
                 definition.Rewards?.Roubles,
+                Money = new
+                {
+                    definition.Rewards?.Money?.Currency,
+                    definition.Rewards?.Money?.Amount
+                },
                 definition.Rewards?.Experience,
                 definition.Rewards?.TraderStanding,
                 Items = (definition.Rewards?.Items ?? [])
