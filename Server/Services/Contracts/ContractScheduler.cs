@@ -1,5 +1,7 @@
 using Google.Cloud.Firestore;
 using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.Models.Utils;
 using TheQuartermaster.Server.Models;
@@ -51,11 +53,62 @@ public class ContractScheduler(
         }
     }
 
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
     private static string GenerateQuestId()
     {
         var bytes = new byte[12];
         RandomNumberGenerator.Fill(bytes);
         return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
+
+    private static string ComputeContentHash(ContractDefinition definition)
+    {
+        var normalized = new
+        {
+            definition.Title,
+            definition.Description,
+            Objectives = definition.Objectives
+                .OrderBy(o => o.Type)
+                .ThenBy(o => o.Description)
+                .ThenBy(o => o.TargetTpl)
+                .ThenBy(o => o.TargetMap)
+                .ThenBy(o => o.TargetZone)
+                .ThenBy(o => o.TargetFaction)
+                .ThenBy(o => o.Count)
+                .ThenBy(o => o.RequiredInRaid)
+                .Select(o => new
+                {
+                    o.Type,
+                    o.Description,
+                    o.TargetTpl,
+                    o.TargetMap,
+                    o.TargetZone,
+                    o.TargetFaction,
+                    o.Count,
+                    o.RequiredInRaid
+                })
+                .ToList(),
+            Rewards = new
+            {
+                definition.Rewards?.Roubles,
+                definition.Rewards?.Experience,
+                definition.Rewards?.TraderStanding,
+                Items = (definition.Rewards?.Items ?? [])
+                    .OrderBy(i => i.Tpl)
+                    .ThenBy(i => i.Count)
+                    .ThenBy(i => i.FoundInRaid)
+                    .Select(i => new { i.Tpl, i.Count, i.FoundInRaid })
+                    .ToList()
+            }
+        };
+
+        var json = JsonSerializer.Serialize(normalized, JsonOptions);
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(json));
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     private async Task ExpireActiveEntriesAsync()
@@ -101,6 +154,17 @@ public class ContractScheduler(
         };
 
         var activeDefinitionIds = new HashSet<string>(activeEntries.Select(e => e.ContractDefinitionId), StringComparer.OrdinalIgnoreCase);
+        var definitionsById = (await firestoreContractService.GetDefinitionsAsync())
+            .Where(d => !string.IsNullOrWhiteSpace(d.Id))
+            .ToDictionary(d => d.Id!, StringComparer.OrdinalIgnoreCase);
+        var activeContentHashes = new HashSet<string>(
+            activeEntries
+                .Where(e => !string.IsNullOrWhiteSpace(e.ContractDefinitionId))
+                .Select(e => definitionsById.TryGetValue(e.ContractDefinitionId, out var def) ? def : null)
+                .Where(def => def is not null)
+                .Select(def => ComputeContentHash(def!))
+                .Distinct(StringComparer.OrdinalIgnoreCase),
+            StringComparer.OrdinalIgnoreCase);
 
         var maxSlots = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
         {
@@ -124,6 +188,15 @@ public class ContractScheduler(
                 continue;
             }
 
+            ContractDefinition? candidateDef = null;
+            if (!string.IsNullOrWhiteSpace(entry.ContractDefinitionId)
+                && definitionsById.TryGetValue(entry.ContractDefinitionId, out candidateDef)
+                && activeContentHashes.Contains(ComputeContentHash(candidateDef)))
+            {
+                logger.Warning($"[TheQuartermaster] Skipping activation of {entry.Id}; an active entry with the same quest content already exists.");
+                continue;
+            }
+
             entry.Status = ContractStatus.Active;
             entry.ActivatedAt = now;
             entry.ExpiresAt ??= entry.EndAt;
@@ -134,7 +207,7 @@ public class ContractScheduler(
 
             await firestoreContractService.UpdateScheduleEntryAsync(entry);
 
-            if (!string.IsNullOrWhiteSpace(entry.ContractDefinitionId))
+            if (!string.IsNullOrWhiteSpace(entry.ContractDefinitionId) && candidateDef is not null)
             {
                 var definition = await GetDefinitionForUpdateAsync(entry.ContractDefinitionId);
                 if (definition is not null)
@@ -144,6 +217,7 @@ public class ContractScheduler(
                 }
 
                 activeDefinitionIds.Add(entry.ContractDefinitionId);
+                activeContentHashes.Add(ComputeContentHash(candidateDef));
             }
 
             activeCounts[entry.RecurrenceType]++;
@@ -162,6 +236,18 @@ public class ContractScheduler(
         };
 
         var activeDefinitionIds = new HashSet<string>(activeEntries.Select(e => e.ContractDefinitionId), StringComparer.OrdinalIgnoreCase);
+        var definitionsById = (await firestoreContractService.GetDefinitionsAsync())
+            .Where(d => !string.IsNullOrWhiteSpace(d.Id))
+            .ToDictionary(d => d.Id!, StringComparer.OrdinalIgnoreCase);
+
+        var activeContentHashes = new HashSet<string>(
+            activeEntries
+                .Where(e => !string.IsNullOrWhiteSpace(e.ContractDefinitionId))
+                .Select(e => definitionsById.TryGetValue(e.ContractDefinitionId, out var def) ? def : null)
+                .Where(def => def is not null)
+                .Select(def => ComputeContentHash(def!))
+                .Distinct(StringComparer.OrdinalIgnoreCase),
+            StringComparer.OrdinalIgnoreCase);
 
         var maxSlots = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
         {
@@ -183,6 +269,7 @@ public class ContractScheduler(
             return;
         }
 
+        var templateHashes = templates.ToDictionary(t => t, ComputeContentHash);
         var now = DateTime.UtcNow;
         var nowTs = Timestamp.FromDateTime(now.ToUniversalTime());
         var cooldown = TimeSpan.FromDays(backendConfigService.Config.CommunityContractCooldownDays);
@@ -200,7 +287,8 @@ public class ContractScheduler(
                 var pool = templates
                     .Where(t => string.Equals(t.RecurrenceType, recurrence, StringComparison.OrdinalIgnoreCase))
                     .Where(t => !activeDefinitionIds.Contains(t.Id!))
-                    .Where(t => !backendConfigService.Config.AllowRepeatTemplates || !t.LastUsedAt.HasValue || t.LastUsedAt.Value.ToDateTime().Add(cooldown) <= now)
+                    .Where(t => !activeContentHashes.Contains(templateHashes[t]))
+                    .Where(t => backendConfigService.Config.AllowRepeatTemplates || !t.LastUsedAt.HasValue || t.LastUsedAt.Value.ToDateTime().Add(cooldown) <= now)
                     .ToList();
 
                 if (pool.Count == 0)
@@ -210,12 +298,13 @@ public class ContractScheduler(
                         pool = templates
                             .Where(t => string.Equals(t.RecurrenceType, recurrence, StringComparison.OrdinalIgnoreCase))
                             .Where(t => !activeDefinitionIds.Contains(t.Id!))
+                            .Where(t => !activeContentHashes.Contains(templateHashes[t]))
                             .ToList();
                     }
 
                     if (pool.Count == 0)
                     {
-                        logger.Warning($"[TheQuartermaster] No available templates for {recurrence} slot (cooldown active, none of matching recurrence, or all matching definitions active).");
+                        logger.Warning($"[TheQuartermaster] No available templates for {recurrence} slot (cooldown active, none of matching recurrence, all matching definitions active, or content already active in another slot).");
                         break;
                     }
                 }
@@ -245,6 +334,7 @@ public class ContractScheduler(
                 }
 
                 activeDefinitionIds.Add(template.Id!);
+                activeContentHashes.Add(templateHashes[template]);
                 activeCounts[recurrence]++;
                 logger.Info($"[TheQuartermaster] Filled {recurrence} slot with template {template.Id}.");
             }
