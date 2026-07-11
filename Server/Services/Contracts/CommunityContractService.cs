@@ -2,6 +2,7 @@ using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.Models.Utils;
 using TheQuartermaster.Server.Models;
 using TheQuartermaster.Server.Models.Contracts;
+using TheQuartermaster.Server.Services;
 
 namespace TheQuartermaster.Server.Services.Contracts;
 
@@ -33,7 +34,7 @@ public class CommunityContractService(
             interval = TimeSpan.FromMinutes(15);
         }
 
-        logger.Info($"[TheQuartermaster] Starting community contract worker with interval {interval.TotalMinutes} minutes.");
+        logger.DebugInfo($"[TheQuartermaster] Starting community contract worker with interval {interval.TotalMinutes} minutes.");
         _timer = new Timer(_ => _ = Task.Run(TickAsync), null, TimeSpan.Zero, interval);
     }
 
@@ -41,7 +42,7 @@ public class CommunityContractService(
     {
         _timer?.Dispose();
         _timer = null;
-        logger.Info("[TheQuartermaster] Stopped community contract worker.");
+        logger.DebugInfo("[TheQuartermaster] Stopped community contract worker.");
     }
 
     public void Dispose()
@@ -65,31 +66,31 @@ public class CommunityContractService(
     {
         if (!await _semaphore.WaitAsync(0))
         {
-            logger.Warning("[TheQuartermaster] Community contract tick already running; skipping.");
+            logger.DebugWarning("[TheQuartermaster] Community contract tick already running; skipping.");
             return;
         }
 
         try
         {
             _lastRefresh = DateTime.UtcNow;
-            logger.Info("[TheQuartermaster] Community contract tick started.");
+            logger.DebugInfo("[TheQuartermaster] Community contract tick started.");
 
             if (!firestoreContractService.IsEnabled)
             {
-                logger.Warning("[TheQuartermaster] Community contracts disabled (Firestore not available).");
+                logger.DebugWarning("[TheQuartermaster] Community contracts disabled (Firestore not available).");
                 return;
             }
 
             if (!backendConfigService.Config.CommunityContractsEnabled)
             {
-                logger.Info("[TheQuartermaster] Community contracts disabled by backend config.");
+                logger.DebugInfo("[TheQuartermaster] Community contracts disabled by backend config.");
                 return;
             }
 
             var version = await firestoreContractService.GetContractVersionAsync();
             if (version == _cachedVersion)
             {
-                logger.Debug($"[TheQuartermaster] Community contract version {version} unchanged; skipping refresh.");
+                logger.DebugDebug($"[TheQuartermaster] Community contract version {version} unchanged; skipping refresh.");
                 return;
             }
 

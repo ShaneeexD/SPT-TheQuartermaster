@@ -57,7 +57,7 @@ public class BuyPatch : AbstractPatch
 
             if (result)
             {
-                _logger?.Info($"[TheQuartermaster] Intercepted purchase for player {sessionID}, listing {buyRequestData.ItemId}.");
+                _logger?.DebugInfo($"[TheQuartermaster] Intercepted purchase for player {sessionID}, listing {buyRequestData.ItemId}.");
                 return false; // Skip original
             }
 

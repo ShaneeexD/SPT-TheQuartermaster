@@ -23,7 +23,7 @@ public class ConfigService(ISptLogger<ConfigService> logger)
         var configPath = Path.Combine(ConfigPath, "config.json");
         if (!File.Exists(configPath))
         {
-            logger.Warning($"[TheQuartermaster] Config not found at {configPath}, using defaults.");
+            logger.DebugWarning($"[TheQuartermaster] Config not found at {configPath}, using defaults.");
             Config = new QuartermasterConfig();
             return;
         }
@@ -37,7 +37,7 @@ public class ConfigService(ISptLogger<ConfigService> logger)
                 ReadCommentHandling = JsonCommentHandling.Skip,
             };
             Config = JsonSerializer.Deserialize<QuartermasterConfig>(json, options) ?? new QuartermasterConfig();
-            logger.Info($"[TheQuartermaster] Config loaded from {configPath}");
+            logger.DebugInfo($"[TheQuartermaster] Config loaded from {configPath}");
         }
         catch (Exception ex)
         {

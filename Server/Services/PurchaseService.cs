@@ -200,7 +200,7 @@ public class PurchaseService(
             // Track this purchase against the player's per-restock limit
             TrackPurchase(sessionID, QuartermasterConstants.TraderId, itemId, count);
 
-            logger.Info($"[TheQuartermaster] Player {sessionID} purchased {count} of {representativeListing.RootTpl}.");
+            logger.DebugInfo($"[TheQuartermaster] Player {sessionID} purchased {count} of {representativeListing.RootTpl}.");
             return true;
         }
         catch (Exception ex)

@@ -59,14 +59,14 @@ public class TraderService(
     {
         if (!configService.Config.ModEnabled)
         {
-            logger.Info("[TheQuartermaster] Mod disabled, skipping trader registration.");
+            logger.DebugInfo("[TheQuartermaster] Mod disabled, skipping trader registration.");
             return;
         }
 
         var traderId = QuartermasterConstants.TraderId;
         if (databaseService.GetTables().Traders.ContainsKey(traderId))
         {
-            logger.Warning($"[TheQuartermaster] Trader {traderId} already registered, skipping.");
+            logger.DebugWarning($"[TheQuartermaster] Trader {traderId} already registered, skipping.");
             return;
         }
 
@@ -79,7 +79,7 @@ public class TraderService(
             {
                 var listings = await marketplaceService.GetActiveListingsAsync();
                 _activeListings.AddRange(listings.Where(l => !backendConfigService.Config.VanillaItemsOnly || l.IsVanilla));
-                logger.Info($"[TheQuartermaster] Loaded {_activeListings.Count} active listings into trader assortment.");
+                logger.DebugInfo($"[TheQuartermaster] Loaded {_activeListings.Count} active listings into trader assortment.");
             }
 
             var traderBase = BuildTraderBase(modPath);
@@ -93,7 +93,7 @@ public class TraderService(
 
             await RefreshAssort();
 
-            logger.Info($"[TheQuartermaster] Trader '{traderBase.Nickname}' registered with {_trader.Assort.Items.Count} items.");
+            logger.DebugInfo($"[TheQuartermaster] Trader '{traderBase.Nickname}' registered with {_trader.Assort.Items.Count} items.");
         }
         catch (Exception ex)
         {
@@ -336,14 +336,14 @@ public class TraderService(
         {
             if (string.IsNullOrWhiteSpace(listing.RootTpl) || !itemHelper.IsItemInDb(new MongoId(listing.RootTpl)))
             {
-                logger.Debug($"[TheQuartermaster] Skipping listing {listing.Id}: root tpl {listing.RootTpl} not in runtime DB.");
+                logger.DebugDebug($"[TheQuartermaster] Skipping listing {listing.Id}: root tpl {listing.RootTpl} not in runtime DB.");
                 continue;
             }
 
             var itemTree = itemCloneService.DeserializeItemTree(listing.ItemTreeJson);
             if (itemTree is null || itemTree.Count == 0)
             {
-                logger.Debug($"[TheQuartermaster] Skipping listing {listing.Id}: could not deserialize item tree.");
+                logger.DebugDebug($"[TheQuartermaster] Skipping listing {listing.Id}: could not deserialize item tree.");
                 continue;
             }
 
@@ -436,7 +436,7 @@ public class TraderService(
         ];
         assort.LoyalLevelItems[assortItemId] = loyaltyLevel;
 
-        logger.Info($"[TheQuartermaster] Merged {listings.Count} listings of {representative.Listing!.RootTpl} into stack of {totalQuantity}.");
+        logger.DebugInfo($"[TheQuartermaster] Merged {listings.Count} listings of {representative.Listing!.RootTpl} into stack of {totalQuantity}.");
     }
 
     private void AddSingleItem(TraderAssort assort, ProcessedListing entry, double markup, int loyaltyLevel)
@@ -508,7 +508,7 @@ public class TraderService(
         }
         catch (Exception ex)
         {
-            logger.Warning($"[TheQuartermaster] Could not resolve loyalty level for {sessionId}: {ex.Message}");
+            logger.DebugWarning($"[TheQuartermaster] Could not resolve loyalty level for {sessionId}: {ex.Message}");
             return (1.05, 1);
         }
     }

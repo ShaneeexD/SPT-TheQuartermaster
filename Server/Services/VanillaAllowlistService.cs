@@ -32,7 +32,7 @@ public class VanillaAllowlistService(
 
         if (!File.Exists(path))
         {
-            logger.Warning($"[TheQuartermaster] Vanilla items file not found at {path}, falling back to live database.");
+            logger.DebugWarning($"[TheQuartermaster] Vanilla items file not found at {path}, falling back to live database.");
             _vanillaIds = new HashSet<string>(databaseService.GetItems().Keys.Select(x => x.ToString()), StringComparer.OrdinalIgnoreCase);
             return;
         }
@@ -49,7 +49,7 @@ public class VanillaAllowlistService(
                 _vanillaIdToName[prop.Name] = name ?? prop.Name;
             }
 
-            logger.Info($"[TheQuartermaster] Loaded {_vanillaIds.Count} vanilla item IDs from {path}");
+            logger.DebugInfo($"[TheQuartermaster] Loaded {_vanillaIds.Count} vanilla item IDs from {path}");
         }
         catch (Exception ex)
         {

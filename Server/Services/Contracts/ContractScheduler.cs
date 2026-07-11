@@ -6,6 +6,7 @@ using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.Models.Utils;
 using TheQuartermaster.Server.Models;
 using TheQuartermaster.Server.Models.Contracts;
+using TheQuartermaster.Server.Services;
 
 namespace TheQuartermaster.Server.Services.Contracts;
 
@@ -33,7 +34,7 @@ public class ContractScheduler(
             interval = TimeSpan.FromMinutes(5);
         }
 
-        logger.Info($"[TheQuartermaster] Starting contract scheduler worker with interval {interval.TotalMinutes} minutes.");
+        logger.DebugInfo($"[TheQuartermaster] Starting contract scheduler worker with interval {interval.TotalMinutes} minutes.");
         _timer = new Timer(_ => _ = Task.Run(TickAsync), null, TimeSpan.Zero, interval);
     }
 
@@ -41,7 +42,7 @@ public class ContractScheduler(
     {
         _timer?.Dispose();
         _timer = null;
-        logger.Info("[TheQuartermaster] Stopped contract scheduler worker.");
+        logger.DebugInfo("[TheQuartermaster] Stopped contract scheduler worker.");
     }
 
     public void Dispose()
@@ -54,7 +55,7 @@ public class ContractScheduler(
     {
         if (!await _semaphore.WaitAsync(0))
         {
-            logger.Warning("[TheQuartermaster] Contract scheduler tick already running; skipping.");
+            logger.DebugWarning("[TheQuartermaster] Contract scheduler tick already running; skipping.");
             return;
         }
 
@@ -97,7 +98,7 @@ public class ContractScheduler(
             }
 
             await firestoreContractService.UpdateScheduleEntryAsync(entry);
-            logger.Info($"[TheQuartermaster] Assigned quest ID {entry.QuestId} to schedule entry {entry.Id}.");
+            logger.DebugInfo($"[TheQuartermaster] Assigned quest ID {entry.QuestId} to schedule entry {entry.Id}.");
         }
     }
 
@@ -185,7 +186,7 @@ public class ContractScheduler(
                 }
             }
 
-            logger.Info($"[TheQuartermaster] Contract schedule entry expired: {entry.Id}.");
+            logger.DebugInfo($"[TheQuartermaster] Contract schedule entry expired: {entry.Id}.");
         }
     }
 
@@ -273,7 +274,7 @@ public class ContractScheduler(
 
             if (!string.IsNullOrWhiteSpace(entry.ContractDefinitionId) && activeDefinitionIds.Contains(entry.ContractDefinitionId))
             {
-                logger.Warning($"[TheQuartermaster] Skipping activation of {entry.Id}; an active entry for definition {entry.ContractDefinitionId} already exists.");
+                logger.DebugWarning($"[TheQuartermaster] Skipping activation of {entry.Id}; an active entry for definition {entry.ContractDefinitionId} already exists.");
                 continue;
             }
 
@@ -282,7 +283,7 @@ public class ContractScheduler(
                 && definitionsById.TryGetValue(entry.ContractDefinitionId, out candidateDef)
                 && activeContentHashes.Contains(ComputeContentHash(candidateDef)))
             {
-                logger.Warning($"[TheQuartermaster] Skipping activation of {entry.Id}; an active entry with the same quest content already exists.");
+                logger.DebugWarning($"[TheQuartermaster] Skipping activation of {entry.Id}; an active entry with the same quest content already exists.");
                 continue;
             }
 
@@ -311,7 +312,7 @@ public class ContractScheduler(
             }
 
             activeCounts[entry.RecurrenceType]++;
-            logger.Info($"[TheQuartermaster] Activated {entry.RecurrenceType} contract schedule entry: {entry.Id}.");
+            logger.DebugInfo($"[TheQuartermaster] Activated {entry.RecurrenceType} contract schedule entry: {entry.Id}.");
         }
     }
 
@@ -385,7 +386,7 @@ public class ContractScheduler(
 
             if (existingForWindow)
             {
-                logger.Debug($"[TheQuartermaster] {recurrence} window already has a schedule entry; skipping.");
+                logger.DebugDebug($"[TheQuartermaster] {recurrence} window already has a schedule entry; skipping.");
                 continue;
             }
 
@@ -415,7 +416,7 @@ public class ContractScheduler(
 
                 if (pool.Count == 0)
                 {
-                    logger.Warning($"[TheQuartermaster] No available templates for {recurrence} slot (cooldown active, none of matching recurrence, all matching definitions active, or content already active in another slot).");
+                    logger.DebugWarning($"[TheQuartermaster] No available templates for {recurrence} slot (cooldown active, none of matching recurrence, all matching definitions active, or content already active in another slot).");
                     continue;
                 }
             }
@@ -449,7 +450,7 @@ public class ContractScheduler(
             activeDefinitionIds.Add(template.Id!);
             activeContentHashes.Add(templateHashes[template]);
             activeCounts[recurrence]++;
-            logger.Info($"[TheQuartermaster] Filled {recurrence} slot with template {template.Id} for window {windowStartUtc:O} to {windowEndUtc:O}.");
+            logger.DebugInfo($"[TheQuartermaster] Filled {recurrence} slot with template {template.Id} for window {windowStartUtc:O} to {windowEndUtc:O}.");
         }
     }
 

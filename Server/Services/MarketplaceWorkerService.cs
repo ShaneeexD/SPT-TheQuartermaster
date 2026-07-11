@@ -29,7 +29,7 @@ public class MarketplaceWorkerService(
             interval = TimeSpan.FromMinutes(5);
         }
 
-        logger.Info($"[TheQuartermaster] Starting marketplace worker with interval {interval.TotalMinutes} minutes.");
+        logger.DebugInfo($"[TheQuartermaster] Starting marketplace worker with interval {interval.TotalMinutes} minutes.");
         _timer = new Timer(_ => _ = Task.Run(TickAsync), null, TimeSpan.Zero, interval);
     }
 
@@ -37,7 +37,7 @@ public class MarketplaceWorkerService(
     {
         _timer?.Dispose();
         _timer = null;
-        logger.Info("[TheQuartermaster] Stopped marketplace worker.");
+        logger.DebugInfo("[TheQuartermaster] Stopped marketplace worker.");
     }
 
     public async Task TickAsync()
@@ -54,7 +54,7 @@ public class MarketplaceWorkerService(
 
         if (!await _semaphore.WaitAsync(0))
         {
-            logger.Warning("[TheQuartermaster] Marketplace worker tick already running; skipping.");
+            logger.DebugWarning("[TheQuartermaster] Marketplace worker tick already running; skipping.");
             return;
         }
 
@@ -65,11 +65,11 @@ public class MarketplaceWorkerService(
 
             if (!await realtimeDatabaseService.TryAcquireCatalogueLeaseAsync(TimeSpan.FromMinutes(2)))
             {
-                logger.Debug("[TheQuartermaster] Marketplace worker could not acquire RTDB lease; skipping.");
+                logger.DebugDebug("[TheQuartermaster] Marketplace worker could not acquire RTDB lease; skipping.");
                 return;
             }
 
-            logger.Debug("[TheQuartermaster] Marketplace worker tick started.");
+            logger.DebugDebug("[TheQuartermaster] Marketplace worker tick started.");
 
             await itemOverrideService.RefreshAsync();
             await marketplaceService.CleanupExpiredListingsAsync();
@@ -78,7 +78,7 @@ public class MarketplaceWorkerService(
 
             await realtimeDatabaseService.ReleaseCatalogueLeaseAsync();
 
-            logger.Debug("[TheQuartermaster] Marketplace worker tick complete.");
+            logger.DebugDebug("[TheQuartermaster] Marketplace worker tick complete.");
         }
         catch (Exception ex)
         {

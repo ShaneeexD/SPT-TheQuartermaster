@@ -64,7 +64,7 @@ public class ItemOverrideService(
                 _lastRefresh = DateTime.UtcNow;
             }
 
-            logger.Info($"[TheQuartermaster] Loaded {overrides.Count} item price override(s) from Firestore.");
+            logger.DebugInfo($"[TheQuartermaster] Loaded {overrides.Count} item price override(s) from Firestore.");
         }
         catch (Exception ex)
         {

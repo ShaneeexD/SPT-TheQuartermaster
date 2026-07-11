@@ -33,14 +33,14 @@ public class FirebaseAuthService(
         if (string.IsNullOrWhiteSpace(configService.Config.FirebaseApiKey) ||
             string.IsNullOrWhiteSpace(configService.Config.FirebaseProjectId))
         {
-            logger.Warning("[TheQuartermaster] Firebase public client config not set; anonymous auth unavailable.");
+            logger.DebugWarning("[TheQuartermaster] Firebase public client config not set; anonymous auth unavailable.");
             return;
         }
 
         try
         {
             await GetIdTokenAsync();
-            logger.Info($"[TheQuartermaster] Firebase anonymous auth initialised. UID: {Uuid}");
+            logger.DebugInfo($"[TheQuartermaster] Firebase anonymous auth initialised. UID: {Uuid}");
         }
         catch (Exception ex)
         {
@@ -67,7 +67,7 @@ public class FirebaseAuthService(
                 }
                 catch (Exception ex)
                 {
-                    logger.Warning($"[TheQuartermaster] Firebase token refresh failed, signing up again: {ex.Message}");
+                    logger.DebugWarning($"[TheQuartermaster] Firebase token refresh failed, signing up again: {ex.Message}");
                 }
             }
 

@@ -22,7 +22,7 @@ public class FirestoreService(
         if (!configService.Config.ModEnabled)
         {
             IsEnabled = false;
-            logger.Warning("[TheQuartermaster] Firestore disabled (mod disabled).");
+            logger.DebugWarning("[TheQuartermaster] Firestore disabled (mod disabled).");
             return;
         }
 
@@ -47,7 +47,7 @@ public class FirestoreService(
 
             _db = FirestoreDb.Create(projectId, firestoreClient);
             IsEnabled = true;
-            logger.Info($"[TheQuartermaster] Firestore initialised for project {projectId} with no credentials (open rules).");
+            logger.DebugInfo($"[TheQuartermaster] Firestore initialised for project {projectId} with no credentials (open rules).");
         }
         catch (Exception ex)
         {

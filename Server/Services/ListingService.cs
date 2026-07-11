@@ -44,13 +44,13 @@ public class ListingService(
 
         if (marketPrice < QuartermasterConstants.Marketplace.MinPrice)
         {
-            logger.Info($"[TheQuartermaster] Listing for {name} priced below minimum, adjusting to minimum.");
+            logger.DebugInfo($"[TheQuartermaster] Listing for {name} priced below minimum, adjusting to minimum.");
             marketPrice = QuartermasterConstants.Marketplace.MinPrice;
         }
 
         if (marketPrice > QuartermasterConstants.Marketplace.MaxPrice)
         {
-            logger.Warning($"[TheQuartermaster] Listing for {name} exceeds max price, capping.");
+            logger.DebugWarning($"[TheQuartermaster] Listing for {name} exceeds max price, capping.");
             marketPrice = QuartermasterConstants.Marketplace.MaxPrice;
         }
 

@@ -45,7 +45,7 @@ public class RealtimeDatabaseService(
         if (!configService.Config.ModEnabled)
         {
             IsEnabled = false;
-            logger.Warning("[TheQuartermaster] Realtime Database disabled (mod disabled).");
+            logger.DebugWarning("[TheQuartermaster] Realtime Database disabled (mod disabled).");
             return;
         }
 
@@ -64,7 +64,7 @@ public class RealtimeDatabaseService(
             await firebaseAuthService.GetIdTokenAsync();
 
             IsEnabled = true;
-            logger.Info($"[TheQuartermaster] Realtime Database initialised for {ResolveDatabaseUrl()}.");
+            logger.DebugInfo($"[TheQuartermaster] Realtime Database initialised for {ResolveDatabaseUrl()}.");
         }
         catch (Exception ex)
         {
@@ -101,7 +101,7 @@ public class RealtimeDatabaseService(
             await PutJsonAsync(GetExpiryIndexPath(ToUnixSeconds(listing.ExpiresAt), listing.Id), true);
             await BumpCatalogueVersionAsync();
 
-            logger.Debug($"[TheQuartermaster] Uploaded listing {listing.Id} to RTDB.");
+            logger.DebugDebug($"[TheQuartermaster] Uploaded listing {listing.Id} to RTDB.");
             return ToQuartermasterListing(data, state, listing.Id);
         }
         catch (Exception ex)
@@ -135,12 +135,12 @@ public class RealtimeDatabaseService(
 
                 if (!await PutJsonWithEtagAsync("meta/catalogue", meta, etag))
                 {
-                    logger.Debug($"[TheQuartermaster] Catalogue version bump conflicted (attempt {attempt + 1}); retrying.");
+                    logger.DebugDebug($"[TheQuartermaster] Catalogue version bump conflicted (attempt {attempt + 1}); retrying.");
                     await Task.Delay(50);
                     continue;
                 }
 
-                logger.Debug($"[TheQuartermaster] Bumped catalogue version to {meta.Version}.");
+                logger.DebugDebug($"[TheQuartermaster] Bumped catalogue version to {meta.Version}.");
                 return;
             }
             catch (Exception ex)
@@ -166,15 +166,15 @@ public class RealtimeDatabaseService(
             var versionText = _cachedVersion ?? "(none)";
             if (refreshed)
             {
-                logger.Info($"[TheQuartermaster] Catalogue version {versionText} updated; loaded {listings.Count} active listings.");
+                logger.DebugInfo($"[TheQuartermaster] Catalogue version {versionText} updated; loaded {listings.Count} active listings.");
             }
             else if (!wasInitialized)
             {
-                logger.Info($"[TheQuartermaster] Catalogue version {versionText} unchanged; using {listings.Count} local cache listings.");
+                logger.DebugInfo($"[TheQuartermaster] Catalogue version {versionText} unchanged; using {listings.Count} local cache listings.");
             }
             else
             {
-                logger.Debug($"[TheQuartermaster] Catalogue version {versionText} unchanged; using {listings.Count} local cache listings.");
+                logger.DebugDebug($"[TheQuartermaster] Catalogue version {versionText} unchanged; using {listings.Count} local cache listings.");
             }
             return listings;
         }
@@ -236,17 +236,17 @@ public class RealtimeDatabaseService(
         var listings = await listingsTask;
         Dictionary<string, RtdbListingState> states = await statesTask ?? new Dictionary<string, RtdbListingState>();
 
-        logger.Debug($"[TheQuartermaster] RTDB raw listings count: {listings?.Count ?? 0}, raw states count: {states?.Count ?? 0}.");
+        logger.DebugDebug($"[TheQuartermaster] RTDB raw listings count: {listings?.Count ?? 0}, raw states count: {states?.Count ?? 0}.");
 
         if (listings is null)
         {
-            logger.Info("[TheQuartermaster] No listings returned from RTDB; trader will have 0 items.");
+            logger.DebugInfo("[TheQuartermaster] No listings returned from RTDB; trader will have 0 items.");
             return result;
         }
 
         if (listings.Count == 0)
         {
-            logger.Info("[TheQuartermaster] RTDB has no active listings; trader will have 0 items.");
+            logger.DebugInfo("[TheQuartermaster] RTDB has no active listings; trader will have 0 items.");
             return result;
         }
 
@@ -435,11 +435,11 @@ public class RealtimeDatabaseService(
 
                 if (await PutJsonWithEtagAsync($"listingStates/{listingId}", state, etag))
                 {
-                    logger.Debug($"[TheQuartermaster] Reserved {toTake} from listing {listingId} (attempt {attempt}).");
+                    logger.DebugDebug($"[TheQuartermaster] Reserved {toTake} from listing {listingId} (attempt {attempt}).");
                     return toTake;
                 }
 
-                logger.Warning($"[TheQuartermaster] Listing {listingId} changed during purchase attempt {attempt}; retrying.");
+                logger.DebugWarning($"[TheQuartermaster] Listing {listingId} changed during purchase attempt {attempt}; retrying.");
                 await Task.Delay(50);
             }
             catch (Exception ex)
@@ -476,7 +476,7 @@ public class RealtimeDatabaseService(
 
             if (!await PutJsonWithEtagAsync($"listingStates/{listingId}", state, etag))
             {
-                logger.Warning($"[TheQuartermaster] Complete purchase for {listingId} conflicted; skipping.");
+                logger.DebugWarning($"[TheQuartermaster] Complete purchase for {listingId} conflicted; skipping.");
                 return;
             }
 
@@ -544,7 +544,7 @@ public class RealtimeDatabaseService(
 
             if (!await PutJsonWithEtagAsync($"listingStates/{listingId}", state, etag))
             {
-                logger.Warning($"[TheQuartermaster] Release listing quantity for {listingId} conflicted; skipping.");
+                logger.DebugWarning($"[TheQuartermaster] Release listing quantity for {listingId} conflicted; skipping.");
             }
         }
         catch (Exception ex)
@@ -609,7 +609,7 @@ public class RealtimeDatabaseService(
 
             if (count > 0)
             {
-                logger.Info($"[TheQuartermaster] Marked {count} expired listings in RTDB.");
+                logger.DebugInfo($"[TheQuartermaster] Marked {count} expired listings in RTDB.");
                 await BumpCatalogueVersionAsync();
             }
         }
@@ -650,7 +650,7 @@ public class RealtimeDatabaseService(
 
             if (count > 0)
             {
-                logger.Info($"[TheQuartermaster] Deleted {count} expired listings from RTDB.");
+                logger.DebugInfo($"[TheQuartermaster] Deleted {count} expired listings from RTDB.");
                 await BumpCatalogueVersionAsync();
             }
         }
@@ -679,13 +679,13 @@ public class RealtimeDatabaseService(
 
             if (meta is not null && !refreshed)
             {
-                logger.Info($"[TheQuartermaster] Catalogue version {version} unchanged; no rebuild needed.");
+                logger.DebugInfo($"[TheQuartermaster] Catalogue version {version} unchanged; no rebuild needed.");
                 return;
             }
 
             if (meta is null)
             {
-                logger.Info("[TheQuartermaster] No catalogue meta found; building initial catalogue.");
+                logger.DebugInfo("[TheQuartermaster] No catalogue meta found; building initial catalogue.");
             }
 
             _cachedVersion = version;
@@ -701,7 +701,7 @@ public class RealtimeDatabaseService(
 
             await PutJsonAsync("meta/catalogue", newMeta);
             await SaveCatalogueCache(listings, version);
-            logger.Info($"[TheQuartermaster] Rebuilt catalogue version {version} with {listings.Count} listings.");
+            logger.DebugInfo($"[TheQuartermaster] Rebuilt catalogue version {version} with {listings.Count} listings.");
         }
         catch (Exception ex)
         {
@@ -865,14 +865,14 @@ public class RealtimeDatabaseService(
         using var response = await _httpClient.SendAsync(request);
         if (!response.IsSuccessStatusCode)
         {
-            logger.Warning($"[TheQuartermaster] RTDB read failed for {path}: {response.StatusCode} {await response.Content.ReadAsStringAsync()}");
+            logger.DebugWarning($"[TheQuartermaster] RTDB read failed for {path}: {response.StatusCode} {await response.Content.ReadAsStringAsync()}");
             return null;
         }
 
         var json = await response.Content.ReadAsStringAsync();
         if (string.IsNullOrWhiteSpace(json) || json == "null")
         {
-            logger.Debug($"[TheQuartermaster] RTDB read returned empty for {path}.");
+            logger.DebugDebug($"[TheQuartermaster] RTDB read returned empty for {path}.");
             return new Dictionary<string, T>();
         }
 
@@ -895,7 +895,7 @@ public class RealtimeDatabaseService(
         using var response = await _httpClient.SendAsync(request);
         if (!response.IsSuccessStatusCode)
         {
-            logger.Warning($"[TheQuartermaster] RTDB write failed for {path}: {response.StatusCode} {await response.Content.ReadAsStringAsync()}");
+            logger.DebugWarning($"[TheQuartermaster] RTDB write failed for {path}: {response.StatusCode} {await response.Content.ReadAsStringAsync()}");
         }
         return response.IsSuccessStatusCode;
     }
@@ -1122,7 +1122,7 @@ public class RealtimeDatabaseService(
         }
         catch (Exception ex)
         {
-            logger.Warning($"[TheQuartermaster] Failed to save catalogue cache: {ex.Message}");
+            logger.DebugWarning($"[TheQuartermaster] Failed to save catalogue cache: {ex.Message}");
         }
     }
 
@@ -1147,7 +1147,7 @@ public class RealtimeDatabaseService(
         }
         catch (Exception ex)
         {
-            logger.Debug($"[TheQuartermaster] Failed to load local catalogue cache: {ex.Message}");
+            logger.DebugDebug($"[TheQuartermaster] Failed to load local catalogue cache: {ex.Message}");
             return null;
         }
     }
@@ -1181,11 +1181,11 @@ public class RealtimeDatabaseService(
                 _cacheLock.Release();
             }
 
-            logger.Info($"[TheQuartermaster] Fell back to local catalogue cache with {result.Count} listings.");
+            logger.DebugInfo($"[TheQuartermaster] Fell back to local catalogue cache with {result.Count} listings.");
         }
         catch (Exception ex)
         {
-            logger.Warning($"[TheQuartermaster] Failed to load catalogue cache: {ex.Message}");
+            logger.DebugWarning($"[TheQuartermaster] Failed to load catalogue cache: {ex.Message}");
         }
 
         return result;

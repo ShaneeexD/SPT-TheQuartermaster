@@ -67,7 +67,7 @@ public class QuartermasterPlugin(
         try
         {
             _modPath = modHelper.GetAbsolutePathToModFolder(typeof(QuartermasterPlugin).Assembly);
-            logger.Info("[TheQuartermaster] Initialising...");
+            logger.DebugInfo("[TheQuartermaster] Initialising...");
 
             configService.Load(_modPath);
             vanillaAllowlistService.Load(_modPath);
@@ -84,7 +84,7 @@ public class QuartermasterPlugin(
             }
             catch (Exception ex)
             {
-                logger.Warning($"[TheQuartermaster] Initial workshop sync failed: {ex.Message}");
+                logger.DebugWarning($"[TheQuartermaster] Initial workshop sync failed: {ex.Message}");
             }
 
             try
@@ -93,7 +93,7 @@ public class QuartermasterPlugin(
             }
             catch (Exception ex)
             {
-                logger.Warning($"[TheQuartermaster] Initial scheduler tick failed: {ex.Message}");
+                logger.DebugWarning($"[TheQuartermaster] Initial scheduler tick failed: {ex.Message}");
             }
 
             await communityContractService.RefreshAsync(force: true);
@@ -124,7 +124,7 @@ public class QuartermasterPlugin(
             buyPatch.Enable();
             traderRefreshPatch.Enable();
 
-            logger.Info("[TheQuartermaster] Loaded successfully.");
+            logger.DebugInfo("[TheQuartermaster] Loaded successfully.");
         }
         catch (Exception ex)
         {

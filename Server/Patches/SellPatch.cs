@@ -100,7 +100,7 @@ public class SellPatch : AbstractPatch
                 var cap = _backendConfigService.Config.MaxActiveListings;
                 if (activeCount >= cap)
                 {
-                    _logger?.Warning($"[TheQuartermaster] Global active listing cap reached ({activeCount}/{cap}); blocking sale.");
+                    _logger?.DebugWarning($"[TheQuartermaster] Global active listing cap reached ({activeCount}/{cap}); blocking sale.");
                     _httpResponseUtil?.AppendErrorToOutput(
                         output,
                         "[TheQuartermaster] The global marketplace is full. Try again later.",
@@ -167,7 +167,7 @@ public class SellPatch : AbstractPatch
 
                 if (listing is null)
                 {
-                    _logger?.Warning($"[TheQuartermaster] Could not create listing for item {itemIdToFind}.");
+                    _logger?.DebugWarning($"[TheQuartermaster] Could not create listing for item {itemIdToFind}.");
                     continue;
                 }
 
@@ -175,7 +175,7 @@ public class SellPatch : AbstractPatch
                 {
                     if (_marketplaceService?.IsEnabled != true)
                     {
-                        _logger?.Warning("[TheQuartermaster] Marketplace backend is not enabled, cannot upload listing.");
+                        _logger?.DebugWarning("[TheQuartermaster] Marketplace backend is not enabled, cannot upload listing.");
                         continue;
                     }
 
@@ -186,22 +186,22 @@ public class SellPatch : AbstractPatch
                         continue;
                     }
 
-                    _logger?.Info($"[TheQuartermaster] Listed item {itemIdToFind} as listing {uploadedListing.Id}.");
+                    _logger?.DebugInfo($"[TheQuartermaster] Listed item {itemIdToFind} as listing {uploadedListing.Id}.");
                 }
                 else
                 {
-                    _logger?.Info($"[TheQuartermaster] Upload consent disabled; selling {itemIdToFind} locally without global listing.");
+                    _logger?.DebugInfo($"[TheQuartermaster] Upload consent disabled; selling {itemIdToFind} locally without global listing.");
                 }
 
                 _inventoryHelper?.RemoveItem(profileWithItemsToSell, itemId, sessionID, output);
                 uploaded++;
             }
 
-            _logger?.Info($"[TheQuartermaster] Uploaded {uploaded} listing(s) from player {sessionID}.");
+            _logger?.DebugInfo($"[TheQuartermaster] Uploaded {uploaded} listing(s) from player {sessionID}.");
 
             if (totalComputedPrice > 0 && sellRequest.Price != (int)totalComputedPrice)
             {
-                _logger?.Info($"[TheQuartermaster] Overriding sell-to-trader price from {sellRequest.Price} to {totalComputedPrice}.");
+                _logger?.DebugInfo($"[TheQuartermaster] Overriding sell-to-trader price from {sellRequest.Price} to {totalComputedPrice}.");
                 sellRequest.Price = (int)totalComputedPrice;
             }
 

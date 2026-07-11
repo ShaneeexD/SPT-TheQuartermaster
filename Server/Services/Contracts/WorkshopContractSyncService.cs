@@ -7,6 +7,7 @@ using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.Models.Utils;
 using TheQuartermaster.Server.Models;
 using TheQuartermaster.Server.Models.Contracts;
+using TheQuartermaster.Server.Services;
 
 namespace TheQuartermaster.Server.Services.Contracts;
 
@@ -35,7 +36,7 @@ public class WorkshopContractSyncService(
             interval = TimeSpan.FromMinutes(5);
         }
 
-        logger.Info($"[TheQuartermaster] Starting workshop contract sync worker with interval {interval.TotalMinutes} minutes.");
+        logger.DebugInfo($"[TheQuartermaster] Starting workshop contract sync worker with interval {interval.TotalMinutes} minutes.");
         _timer = new Timer(_ => _ = Task.Run(SyncAsync), null, TimeSpan.Zero, interval);
     }
 
@@ -43,7 +44,7 @@ public class WorkshopContractSyncService(
     {
         _timer?.Dispose();
         _timer = null;
-        logger.Info("[TheQuartermaster] Stopped workshop contract sync worker.");
+        logger.DebugInfo("[TheQuartermaster] Stopped workshop contract sync worker.");
     }
 
     public void Dispose()
@@ -56,7 +57,7 @@ public class WorkshopContractSyncService(
     {
         if (!await _semaphore.WaitAsync(0))
         {
-            logger.Warning("[TheQuartermaster] Workshop sync already running; skipping.");
+            logger.DebugWarning("[TheQuartermaster] Workshop sync already running; skipping.");
             return;
         }
 
@@ -65,17 +66,17 @@ public class WorkshopContractSyncService(
             var apiUrl = GetApiUrl();
             if (string.IsNullOrWhiteSpace(apiUrl))
             {
-                logger.Info("[TheQuartermaster] Workshop sync disabled; no API URL configured.");
+                logger.DebugInfo("[TheQuartermaster] Workshop sync disabled; no API URL configured.");
                 return;
             }
 
             if (!firestoreContractService.IsEnabled)
             {
-                logger.Warning("[TheQuartermaster] Workshop sync skipped; Firestore not available.");
+                logger.DebugWarning("[TheQuartermaster] Workshop sync skipped; Firestore not available.");
                 return;
             }
 
-            logger.Info($"[TheQuartermaster] Syncing workshop contracts from {apiUrl}");
+            logger.DebugInfo($"[TheQuartermaster] Syncing workshop contracts from {apiUrl}");
 
             var activeResponse = await FetchAsync(apiUrl, "active");
             var contractsResponse = await FetchAsync(apiUrl, "contracts");
@@ -164,7 +165,7 @@ public class WorkshopContractSyncService(
                 await firestoreContractService.UpdateSubmissionAsync(submission);
             }
 
-            logger.Info($"[TheQuartermaster] Workshop sync complete. {definitions.Count} definitions, {schedules.Count} schedule entries, {submissions.Count} submissions.");
+            logger.DebugInfo($"[TheQuartermaster] Workshop sync complete. {definitions.Count} definitions, {schedules.Count} schedule entries, {submissions.Count} submissions.");
         }
         catch (Exception ex)
         {

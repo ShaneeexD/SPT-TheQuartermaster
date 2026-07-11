@@ -5,6 +5,7 @@ using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.Helpers;
 using SPTarkov.Server.Core.Models.Utils;
 using TheQuartermaster.Server.Models.Contracts;
+using TheQuartermaster.Server.Services;
 namespace TheQuartermaster.Server.Services.Contracts;
 
 [Injectable(InjectionType.Singleton)]
@@ -41,7 +42,7 @@ public class ContractInjectionService(
         }
         catch (Exception ex)
         {
-            logger.Warning($"[TheQuartermaster] Failed to clean previous community quests: {ex.Message}");
+            logger.DebugWarning($"[TheQuartermaster] Failed to clean previous community quests: {ex.Message}");
         }
 
         var traderId = QuartermasterConstants.TraderId.ToString();
@@ -53,10 +54,10 @@ public class ContractInjectionService(
             itemHelper
         );
 
-        logger.Info($"[TheQuartermaster] Built {count} community quest file(s) for trader {traderId}.");
+        logger.DebugInfo($"[TheQuartermaster] Built {count} community quest file(s) for trader {traderId}.");
 
         await wttCommon.CustomQuestService.CreateCustomQuests(Assembly.GetExecutingAssembly(), QuestFolderName);
-        logger.Info("[TheQuartermaster] Injected community quests via WTT CustomQuestService.");
+        logger.DebugInfo("[TheQuartermaster] Injected community quests via WTT CustomQuestService.");
     }
 
     private void RemoveExpiredQuestSections(string questOutputDir, List<ContractScheduleEntry> activeEntries)
@@ -125,11 +126,11 @@ public class ContractInjectionService(
                 }
             }
 
-            logger.Info($"[TheQuartermaster] Removed {removed.Count} expired quest section(s) from local quest files.");
+            logger.DebugInfo($"[TheQuartermaster] Removed {removed.Count} expired quest section(s) from local quest files.");
         }
         catch (Exception ex)
         {
-            logger.Warning($"[TheQuartermaster] Failed to clean expired local quest files: {ex.Message}");
+            logger.DebugWarning($"[TheQuartermaster] Failed to clean expired local quest files: {ex.Message}");
         }
     }
 }

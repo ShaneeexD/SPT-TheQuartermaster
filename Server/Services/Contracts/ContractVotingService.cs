@@ -2,6 +2,7 @@ using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.Models.Utils;
 using TheQuartermaster.Server.Models;
 using TheQuartermaster.Server.Models.Contracts;
+using TheQuartermaster.Server.Services;
 
 namespace TheQuartermaster.Server.Services.Contracts;
 
@@ -26,7 +27,7 @@ public class ContractVotingService(
             return;
         }
 
-        logger.Info($"[TheQuartermaster] Processing {submissions.Count} pending contract submission(s).");
+        logger.DebugInfo($"[TheQuartermaster] Processing {submissions.Count} pending contract submission(s).");
 
         foreach (var submission in submissions)
         {
@@ -41,7 +42,7 @@ public class ContractVotingService(
             submission.Status = ContractStatus.Rejected;
             submission.ValidationErrors = ["Blocked by admin."];
             await firestoreContractService.UpdateSubmissionAsync(submission);
-            logger.Info($"[TheQuartermaster] Submission {submission.Id} rejected (admin block).");
+            logger.DebugInfo($"[TheQuartermaster] Submission {submission.Id} rejected (admin block).");
             return;
         }
 
@@ -51,7 +52,7 @@ public class ContractVotingService(
             submission.Status = ContractStatus.Rejected;
             submission.ValidationErrors = validation.Errors;
             await firestoreContractService.UpdateSubmissionAsync(submission);
-            logger.Info($"[TheQuartermaster] Submission {submission.Id} rejected (validation failed).");
+            logger.DebugInfo($"[TheQuartermaster] Submission {submission.Id} rejected (validation failed).");
             return;
         }
 
@@ -68,7 +69,7 @@ public class ContractVotingService(
 
             submission.Status = ContractStatus.Approved;
             await firestoreContractService.UpdateSubmissionAsync(submission);
-            logger.Info($"[TheQuartermaster] Admin submission {submission.Id} approved automatically.");
+            logger.DebugInfo($"[TheQuartermaster] Admin submission {submission.Id} approved automatically.");
             return;
         }
 
@@ -93,7 +94,7 @@ public class ContractVotingService(
 
             submission.Status = ContractStatus.Approved;
             await firestoreContractService.UpdateSubmissionAsync(submission);
-            logger.Info($"[TheQuartermaster] Community contract approved: {submission.Title} (ratio {submission.ApprovalRatio:F1}%, {totalVotes} votes).");
+            logger.DebugInfo($"[TheQuartermaster] Community contract approved: {submission.Title} (ratio {submission.ApprovalRatio:F1}%, {totalVotes} votes).");
         }
         else
         {
@@ -103,7 +104,7 @@ public class ContractVotingService(
                 $"Voting ended with {totalVotes} votes and {submission.ApprovalRatio:F1}% approval (required {minVotes} votes and {approvalPct}%)."
             ];
             await firestoreContractService.UpdateSubmissionAsync(submission);
-            logger.Info($"[TheQuartermaster] Community contract rejected: {submission.Title} (ratio {submission.ApprovalRatio:F1}%, {totalVotes} votes).");
+            logger.DebugInfo($"[TheQuartermaster] Community contract rejected: {submission.Title} (ratio {submission.ApprovalRatio:F1}%, {totalVotes} votes).");
         }
     }
 }
