@@ -184,7 +184,7 @@ public class TraderService(
                     MinLevel = 1,
                     MinSalesSum = 0,
                     MinStanding = 0,
-                    BuyPriceCoefficient = 0.9,
+                    BuyPriceCoefficient = 10,
                     InsurancePriceCoefficient = 1,
                     RepairPriceCoefficient = 1,
                     ExchangePriceCoefficient = 1,
