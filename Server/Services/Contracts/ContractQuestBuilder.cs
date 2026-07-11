@@ -99,9 +99,9 @@ public static class ContractQuestBuilder
 
             var questId = !string.IsNullOrWhiteSpace(entry.QuestId)
                 ? entry.QuestId
-                : DeriveQuestId(entry.Id!);
+                : GenerateQuestId();
             var quest = BuildQuest(questId, definition, entry, allLocales, itemHelper);
-            quest["image"] = "quest.png";
+            quest["image"] = "/files/quest/icon/quest.png";
             allQuests[questId] = quest;
             count++;
         }
@@ -627,11 +627,11 @@ public static class ContractQuestBuilder
         return tpl;
     }
 
-    private static string DeriveQuestId(string scheduleEntryId)
+    internal static string GenerateQuestId()
     {
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(scheduleEntryId));
-        var hex = Convert.ToHexString(hash).ToLowerInvariant();
-        return hex[..24];
+        var bytes = new byte[12];
+        RandomNumberGenerator.Fill(bytes);
+        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
     private static string DeriveStableId(string seed)
@@ -646,8 +646,6 @@ public static class ContractQuestBuilder
         Rng.NextBytes(bytes);
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
-
-    private const string DefaultQuestIconName = "default_quest_icon";
 
     private static string GetRecurrencePrefix(string recurrenceType)
     {
@@ -679,37 +677,6 @@ public static class ContractQuestBuilder
             "EUR" or "EUROS" or "EURO" => "569668774bdc2da2298b4568",
             _ => Money.ROUBLES.ToString()
         };
-    }
-
-    private static string ResolveQuestImage(string questId, ContractDefinition definition, string imagesDir)
-    {
-        if (string.IsNullOrWhiteSpace(definition.ImageDataUrl))
-        {
-            return DefaultQuestIconName;
-        }
-
-        var match = System.Text.RegularExpressions.Regex.Match(definition.ImageDataUrl, @"^data:image/(?<type>\w+);base64,(?<data>.+)$");
-        if (!match.Success)
-        {
-            return DefaultQuestIconName;
-        }
-
-        var imageType = match.Groups["type"].Value.ToLowerInvariant();
-        var extension = imageType == "jpeg" || imageType == "jpg" ? ".jpg" : ".png";
-        var fileName = $"quest_{questId}{extension}";
-        var absPath = Path.Combine(imagesDir, fileName);
-
-        try
-        {
-            var bytes = Convert.FromBase64String(match.Groups["data"].Value);
-            File.WriteAllBytes(absPath, bytes);
-
-            return fileName;
-        }
-        catch
-        {
-            return DefaultQuestIconName;
-        }
     }
 
     private static void GenerateDefaultQuestIcon(string path)

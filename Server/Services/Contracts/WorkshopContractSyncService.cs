@@ -289,7 +289,7 @@ public class WorkshopContractSyncService(
             AdminCreated = false,
             CreatedAt = GetTimestamp(element, "created_at") ?? Timestamp.GetCurrentTimestamp(),
             UpdatedAt = GetTimestamp(element, "updated_at") ?? Timestamp.GetCurrentTimestamp(),
-            QuestId = string.IsNullOrWhiteSpace(GetString(element, "quest_id")) ? GenerateStableQuestId(id) : GetString(element, "quest_id")
+            QuestId = string.IsNullOrWhiteSpace(GetString(element, "quest_id")) ? GenerateQuestId() : GetString(element, "quest_id")
         };
 
         return entry;
@@ -529,11 +529,6 @@ public class WorkshopContractSyncService(
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
-    private static string GenerateStableQuestId(string seed)
-    {
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(seed));
-        return Convert.ToHexString(hash, 0, 12).ToLowerInvariant();
-    }
 
     private static bool ShouldUpdate(Timestamp? existingUpdatedAt, Timestamp? incomingUpdatedAt)
     {
