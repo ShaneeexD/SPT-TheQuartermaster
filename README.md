@@ -46,6 +46,8 @@ Complete the job before it expires.
 
 Miss the window, and the opportunity is gone.
 
+You can submit and view community made contracts on my [website](https://serenity-workshop.netlify.app/contracts) to be added to the automatic rotating quest pool.
+
 ## Requirements
 
 - SPT-AKI 4.0.13
@@ -57,6 +59,15 @@ Miss the window, and the opportunity is gone.
 2. Extract the `SPT` folder into your SPT install directory.
 3. Launch the SPT server.
 4. The Quartermaster will appear in the trader list. Click **Refresh** on his page if his assortment is empty.
+
+## Notes
+- Trader assort is updated by your local server reading the mods database every time you hit refresh, or buy/sell and item.
+- Quest submissions go through a voting system to ensure only quality quests are auto approved (I can still override submitted quests).
+- Voting lasts for 12 hours, and requires a minimum of 10 votes with a 70% upvote ratio, if the minimum votes are not met, the time will be extended for another 6 hours up to 48 where it will be auto rejected.
+- If someone is seen to be submitting blatently troll quests, you will be banned from submitting again as submitting requires login via discord.
+- New quests are added to the trader every Day/Week/Weekend, and if high quality, will be kept in the rotating pool.
+- One time quests can also be submitted, these will then be deleted after they expire (24 hours).
+- When new quests are added, it requires a game restart for it to be injected into your local database.
 
 ## Credits
 
