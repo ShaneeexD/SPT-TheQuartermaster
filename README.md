@@ -60,7 +60,7 @@ You can submit and view community made contracts on my [website](https://serenit
 3. Launch the SPT server.
 4. The Quartermaster will appear in the trader list. Click **Refresh** on his page if his assortment is empty.
 
-## Notes
+## Important Notes
 - Trader assort is updated by your local server reading the mods online database every time you hit refresh, or buy/sell an item.
 - Quest submissions go through a voting system to ensure only quality quests are auto approved (I can still override submitted quests).
 - Voting lasts for 12 hours, and requires a minimum of 10 votes with a 70% upvote ratio, if the minimum votes are not met, the time will be extended for another 6 hours up to 48 where it will be auto rejected.
