@@ -135,6 +135,15 @@ public class WorkshopContractSyncService(
             var existingSubmissions = (await firestoreContractService.GetAllSubmissionsAsync())
                 .ToDictionary(s => s.Id!, StringComparer.OrdinalIgnoreCase);
 
+            var processedSubmissionIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var definition in existingDefinitions.Values.Concat(definitions.Values))
+            {
+                if (definition.Metadata is not null && definition.Metadata.TryGetValue("source_submission_id", out var sourceSubmissionId) && !string.IsNullOrWhiteSpace(sourceSubmissionId))
+                {
+                    processedSubmissionIds.Add(sourceSubmissionId);
+                }
+            }
+
             foreach (var (id, definition) in definitions)
             {
                 if (existingDefinitions.TryGetValue(id, out var existingDefinition)
@@ -164,6 +173,11 @@ public class WorkshopContractSyncService(
 
             foreach (var (_, submission) in submissions)
             {
+                if (submission.Id is not null && processedSubmissionIds.Contains(submission.Id))
+                {
+                    continue;
+                }
+
                 if (!ShouldUpdate(existingSubmissions.GetValueOrDefault(submission.Id!)?.UpdatedAt, submission.UpdatedAt))
                 {
                     continue;

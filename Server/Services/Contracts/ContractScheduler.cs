@@ -15,7 +15,8 @@ public class ContractScheduler(
     ISptLogger<ContractScheduler> logger,
     ConfigService configService,
     BackendConfigService backendConfigService,
-    FirestoreContractService firestoreContractService
+    FirestoreContractService firestoreContractService,
+    ContractVotingService contractVotingService
 ) : IDisposable
 {
     private readonly SemaphoreSlim _semaphore = new(1, 1);
@@ -61,7 +62,7 @@ public class ContractScheduler(
 
         try
         {
-            if (!backendConfigService.Config.CommunityContractsEnabled || !backendConfigService.Config.AllowAutoScheduling || !firestoreContractService.IsEnabled)
+            if (!backendConfigService.Config.CommunityContractsEnabled || !firestoreContractService.IsEnabled)
             {
                 return;
             }
@@ -70,6 +71,13 @@ public class ContractScheduler(
             await ExpireActiveEntriesAsync();
             await DeleteExpiredDefinitionsAsync();
             await RemoveDuplicateScheduleEntriesAsync();
+            await contractVotingService.ProcessPendingSubmissionsAsync();
+
+            if (!backendConfigService.Config.AllowAutoScheduling)
+            {
+                return;
+            }
+
             await ActivateScheduledEntriesAsync();
             await FillEmptySlotsAsync();
         }
@@ -368,7 +376,8 @@ public class ContractScheduler(
         {
             [ContractRecurrenceType.Daily] = activeEntries.Count(e => e.RecurrenceType == ContractRecurrenceType.Daily),
             [ContractRecurrenceType.Weekly] = activeEntries.Count(e => e.RecurrenceType == ContractRecurrenceType.Weekly),
-            [ContractRecurrenceType.Weekend] = activeEntries.Count(e => e.RecurrenceType == ContractRecurrenceType.Weekend)
+            [ContractRecurrenceType.Weekend] = activeEntries.Count(e => e.RecurrenceType == ContractRecurrenceType.Weekend),
+            [ContractRecurrenceType.OneTime] = activeEntries.Count(e => e.RecurrenceType == ContractRecurrenceType.OneTime)
         };
 
         var activeDefinitionIds = new HashSet<string>(activeEntries.Select(e => e.ContractDefinitionId), StringComparer.OrdinalIgnoreCase);
@@ -490,6 +499,12 @@ public class ContractScheduler(
             if (created is null)
             {
                 continue;
+            }
+
+            if (template.Metadata is not null && template.Metadata.TryGetValue("source_submission_id", out var sourceSubmissionId) && !string.IsNullOrWhiteSpace(sourceSubmissionId))
+            {
+                await firestoreContractService.DeleteSubmissionAsync(sourceSubmissionId);
+                logger.DebugInfo($"[TheQuartermaster] Scheduled source submission {sourceSubmissionId} removed from submissions after scheduling.");
             }
 
             activeDefinitionIds.Add(template.Id!);

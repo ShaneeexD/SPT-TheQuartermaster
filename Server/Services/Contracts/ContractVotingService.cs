@@ -38,10 +38,14 @@ public class ContractVotingService(
 
     private async Task ProcessSubmissionAsync(ContractSubmission submission)
     {
+        var nowTimestamp = Timestamp.GetCurrentTimestamp();
+
         if (submission.AdminBlocked)
         {
             submission.Status = ContractStatus.Rejected;
+            submission.RejectedAt = nowTimestamp;
             submission.ValidationErrors = ["Blocked by admin."];
+            submission.UpdatedAt = nowTimestamp;
             await firestoreContractService.UpdateSubmissionAsync(submission);
             logger.DebugInfo($"[TheQuartermaster] Submission {submission.Id} rejected (admin block).");
             return;
@@ -51,7 +55,9 @@ public class ContractVotingService(
         if (!validation.IsValid)
         {
             submission.Status = ContractStatus.Rejected;
+            submission.RejectedAt = nowTimestamp;
             submission.ValidationErrors = validation.Errors;
+            submission.UpdatedAt = nowTimestamp;
             await firestoreContractService.UpdateSubmissionAsync(submission);
             logger.DebugInfo($"[TheQuartermaster] Submission {submission.Id} rejected (validation failed).");
             return;
@@ -69,6 +75,8 @@ public class ContractVotingService(
             }
 
             submission.Status = ContractStatus.Approved;
+            submission.ApprovedAt = nowTimestamp;
+            submission.UpdatedAt = nowTimestamp;
             await firestoreContractService.UpdateSubmissionAsync(submission);
             logger.DebugInfo($"[TheQuartermaster] Admin submission {submission.Id} approved automatically.");
             return;
@@ -105,6 +113,8 @@ public class ContractVotingService(
             }
 
             submission.Status = ContractStatus.Approved;
+            submission.ApprovedAt = nowTimestamp;
+            submission.UpdatedAt = nowTimestamp;
             await firestoreContractService.UpdateSubmissionAsync(submission);
             logger.DebugInfo($"[TheQuartermaster] Community contract approved: {submission.Title} (ratio {submission.ApprovalRatio:F1}%, {totalVotes} votes).");
         }
@@ -120,16 +130,19 @@ public class ContractVotingService(
             }
 
             submission.VotingEndsAt = Timestamp.FromDateTime(newDeadline.ToUniversalTime());
+            submission.UpdatedAt = nowTimestamp;
             await firestoreContractService.UpdateSubmissionAsync(submission);
             logger.DebugInfo($"[TheQuartermaster] Voting extended for {submission.Title} until {newDeadline:O} ({totalVotes}/{minVotes} votes, {submission.ApprovalRatio:F1}% approval).");
         }
         else
         {
             submission.Status = ContractStatus.Rejected;
+            submission.RejectedAt = nowTimestamp;
             submission.ValidationErrors =
             [
                 $"Voting ended with {totalVotes} votes and {submission.ApprovalRatio:F1}% approval (required {minVotes} votes and {approvalPct}%)."
             ];
+            submission.UpdatedAt = nowTimestamp;
             await firestoreContractService.UpdateSubmissionAsync(submission);
             logger.DebugInfo($"[TheQuartermaster] Community contract rejected: {submission.Title} (ratio {submission.ApprovalRatio:F1}%, {totalVotes} votes).");
         }

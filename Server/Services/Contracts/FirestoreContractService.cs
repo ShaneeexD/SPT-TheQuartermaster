@@ -402,6 +402,25 @@ public class FirestoreContractService(
         }
     }
 
+    public async Task<bool> DeleteSubmissionAsync(string submissionId)
+    {
+        if (Db is null || string.IsNullOrWhiteSpace(submissionId))
+        {
+            return false;
+        }
+
+        try
+        {
+            await Db.Collection(QuartermasterConstants.FirestoreCollections.ContractSubmissions).Document(submissionId).DeleteAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Failed to delete submission {submissionId}: {ex.Message}", ex);
+            return false;
+        }
+    }
+
     public async Task<bool> DeleteDefinitionAsync(string definitionId)
     {
         if (Db is null || string.IsNullOrWhiteSpace(definitionId))
