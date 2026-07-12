@@ -204,7 +204,6 @@ public class FirestoreContractService(
                 SptVersion = submission.SptVersion,
                 Objectives = submission.Objectives,
                 Rewards = submission.Rewards,
-                ImageDataUrl = submission.ImageDataUrl,
                 Upvotes = submission.Upvotes,
                 Downvotes = submission.Downvotes,
                 ApprovalRatio = submission.ApprovalRatio,

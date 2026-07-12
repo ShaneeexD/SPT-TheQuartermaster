@@ -70,10 +70,6 @@ public class ContractDefinition
     [JsonPropertyName("keep")]
     public bool Keep { get; set; }
 
-    [FirestoreProperty("image_data_url")]
-    [JsonPropertyName("image_data_url")]
-    public string? ImageDataUrl { get; set; }
-
     [FirestoreProperty("spt_version")]
     [JsonPropertyName("spt_version")]
     public string SptVersion { get; set; } = "4.0.13";

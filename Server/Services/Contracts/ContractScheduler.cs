@@ -69,6 +69,7 @@ public class ContractScheduler(
             await MigrateEmptyQuestIdsAsync();
             await ExpireActiveEntriesAsync();
             await DeleteExpiredDefinitionsAsync();
+            await RemoveDuplicateScheduleEntriesAsync();
             await ActivateScheduledEntriesAsync();
             await FillEmptySlotsAsync();
         }
@@ -206,17 +207,15 @@ public class ContractScheduler(
                 continue;
             }
 
-            if (!isOneTime
-                && !string.IsNullOrWhiteSpace(entry.ContractDefinitionId)
+            if (!string.IsNullOrWhiteSpace(entry.ContractDefinitionId)
                 && definitions.TryGetValue(entry.ContractDefinitionId, out var definition)
-                && definition.Keep)
+                && !definition.Keep)
             {
-                continue;
-            }
-
-            if (!string.IsNullOrWhiteSpace(entry.ContractDefinitionId))
-            {
-                await firestoreContractService.DeleteDefinitionAsync(entry.ContractDefinitionId);
+                var now = Timestamp.GetCurrentTimestamp();
+                definition.Status = ContractStatus.Expired;
+                definition.ExpiredAt = now;
+                definition.UpdatedAt = now;
+                await firestoreContractService.UpdateDefinitionAsync(definition);
             }
 
             if (!string.IsNullOrWhiteSpace(entry.Id))
@@ -224,6 +223,52 @@ public class ContractScheduler(
                 await firestoreContractService.DeleteScheduleEntryAsync(entry.Id);
             }
         }
+    }
+
+    private async Task RemoveDuplicateScheduleEntriesAsync()
+    {
+        var allEntries = await firestoreContractService.GetScheduleEntriesAsync();
+        var groups = allEntries
+            .Where(e => !string.IsNullOrWhiteSpace(e.ContractDefinitionId))
+            .GroupBy(
+                e => $"{e.ContractDefinitionId}|{e.QuestId ?? string.Empty}",
+                StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1)
+            .ToList();
+
+        foreach (var group in groups)
+        {
+            var ordered = group
+                .OrderBy(e => !string.Equals(e.Id, e.ContractDefinitionId, StringComparison.OrdinalIgnoreCase))
+                .ThenBy(e => GetStatusOrder(e.Status))
+                .ThenByDescending(e => e.EndAt?.ToDateTime() ?? DateTime.MinValue)
+                .ThenByDescending(e => e.ActivatedAt?.ToDateTime() ?? DateTime.MinValue)
+                .ThenByDescending(e => e.CreatedAt?.ToDateTime() ?? DateTime.MinValue)
+                .ThenByDescending(e => e.UpdatedAt?.ToDateTime() ?? DateTime.MinValue)
+                .ThenBy(e => e.Id, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            for (var i = 1; i < ordered.Count; i++)
+            {
+                var duplicate = ordered[i];
+                if (!string.IsNullOrWhiteSpace(duplicate.Id))
+                {
+                    await firestoreContractService.DeleteScheduleEntryAsync(duplicate.Id);
+                    logger.DebugInfo($"[TheQuartermaster] Removed duplicate schedule entry {duplicate.Id} for contract {duplicate.ContractDefinitionId}.");
+                }
+            }
+        }
+    }
+
+    private static int GetStatusOrder(string? status)
+    {
+        if (string.Equals(status, ContractStatus.Active, StringComparison.OrdinalIgnoreCase))
+            return 0;
+        if (string.Equals(status, ContractStatus.Scheduled, StringComparison.OrdinalIgnoreCase))
+            return 1;
+        if (string.Equals(status, ContractStatus.Expired, StringComparison.OrdinalIgnoreCase))
+            return 2;
+        return 3;
     }
 
     private async Task ActivateScheduledEntriesAsync()

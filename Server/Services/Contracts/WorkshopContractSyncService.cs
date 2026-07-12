@@ -137,6 +137,13 @@ public class WorkshopContractSyncService(
 
             foreach (var (id, definition) in definitions)
             {
+                if (existingDefinitions.TryGetValue(id, out var existingDefinition)
+                    && !existingDefinition.Keep
+                    && string.Equals(existingDefinition.Status, ContractStatus.Expired, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
                 if (!ShouldUpdate(existingDefinitions.GetValueOrDefault(id)?.UpdatedAt, definition.UpdatedAt))
                 {
                     continue;
@@ -247,7 +254,6 @@ public class WorkshopContractSyncService(
             SptVersion = GetString(element, "spt_version") ?? backendConfigService.Config.SptVersion,
             IsNew = GetBool(element, "new"),
             Keep = GetBool(element, "keep"),
-            ImageDataUrl = GetString(element, "image_data_url"),
             Objectives = MapObjectives(element),
             Rewards = MapRewards(element),
             Upvotes = GetInt(element, "upvotes") ?? 0,
@@ -273,6 +279,12 @@ public class WorkshopContractSyncService(
     private ContractScheduleEntry? MapScheduleEntry(string? scheduleId, string contractId, JsonElement element)
     {
         var id = string.IsNullOrWhiteSpace(scheduleId) ? Guid.NewGuid().ToString("N") : scheduleId;
+        var endAt = GetTimestamp(element, "end_at");
+
+        if (endAt?.ToDateTime() <= DateTime.UtcNow)
+        {
+            return null;
+        }
 
         var entry = new ContractScheduleEntry
         {
@@ -283,9 +295,9 @@ public class WorkshopContractSyncService(
             RecurrenceType = GetString(element, "recurrence_type") ?? ContractRecurrenceType.OneTime,
             ActivationSource = "workshop",
             StartAt = GetTimestamp(element, "start_at"),
-            EndAt = GetTimestamp(element, "end_at"),
+            EndAt = endAt,
             ActivatedAt = GetTimestamp(element, "activated_at"),
-            ExpiresAt = GetTimestamp(element, "expires_at") ?? GetTimestamp(element, "end_at"),
+            ExpiresAt = GetTimestamp(element, "expires_at") ?? endAt,
             ExpiredAt = GetTimestamp(element, "expired_at"),
             AdminCreated = false,
             CreatedAt = GetTimestamp(element, "created_at") ?? Timestamp.GetCurrentTimestamp(),
