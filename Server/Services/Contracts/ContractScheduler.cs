@@ -16,7 +16,8 @@ public class ContractScheduler(
     ConfigService configService,
     BackendConfigService backendConfigService,
     FirestoreContractService firestoreContractService,
-    ContractVotingService contractVotingService
+    ContractVotingService contractVotingService,
+    WebsiteContractService websiteContractService
 ) : IDisposable
 {
     private readonly SemaphoreSlim _semaphore = new(1, 1);
@@ -504,6 +505,7 @@ public class ContractScheduler(
             if (template.Metadata is not null && template.Metadata.TryGetValue("source_submission_id", out var sourceSubmissionId) && !string.IsNullOrWhiteSpace(sourceSubmissionId))
             {
                 await firestoreContractService.DeleteSubmissionAsync(sourceSubmissionId);
+                await websiteContractService.DeleteSubmissionAsync(sourceSubmissionId);
                 logger.DebugInfo($"[TheQuartermaster] Scheduled source submission {sourceSubmissionId} removed from submissions after scheduling.");
             }
 
