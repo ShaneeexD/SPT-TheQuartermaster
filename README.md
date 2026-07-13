@@ -30,7 +30,7 @@ When it's gone, it's gone.
 
 ## Features
 
-- **Global listings** – Items you sell are uploaded to a shared Firestore database and appear for everyone running the mod.
+- **Global listings** – Items you sell are uploaded to a shared database and appear for everyone running the mod.
 - **Dynamic pricing** – Assortment items are priced at handbook value minus 10% plus a 5% markup, with durability and quality taken into account, markup decreases with higher loyalty level down to 2%.
 - **Server-side only** – No client mod or prepatcher required.
 
@@ -51,7 +51,7 @@ You can submit and view community made contracts on my [website](https://serenit
 ## Requirements
 
 - SPT-AKI 4.0.13
-- A working internet connection (the mod talks to a Firebase Firestore backend)
+- A working internet connection
 
 ## Installation
 
@@ -61,10 +61,10 @@ You can submit and view community made contracts on my [website](https://serenit
 4. The Quartermaster will appear in the trader list. Click **Refresh** on his page if his assortment is empty.
 
 ## Important Notes
-- Trader assort is updated by your local server reading the mods online database every time you hit refresh, or buy/sell an item.
+- Trader assort is updated by your local server reading the mods online database every time you hit refresh, or when it auto refreshes by vanilla functions.
 - Quest submissions go through a voting system to ensure only quality quests are auto approved (I can still override submitted quests).
 - Voting lasts for 12 hours, and requires a minimum of 10 votes with a 70% upvote ratio, if the minimum votes are not met, the time will be extended for another 6 hours up to 48 where it will be auto rejected.
-- If someone is seen to be submitting blatently troll quests, you will be banned from submitting again as submitting requires login via discord.
+- If someone is seen to be submitting blatantly troll quests, you will be banned from submitting again as submitting requires login via discord.
 - New quests are added to the trader every Day/Week/Weekend, and if high quality, will be kept in the rotating pool.
 - One time quests can also be submitted, these will then be deleted after they expire (24 hours).
 - When new quests are added, it requires a game restart for it to be injected into your local database.
