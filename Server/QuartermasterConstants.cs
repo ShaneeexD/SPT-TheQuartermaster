@@ -25,7 +25,7 @@ public static class QuartermasterConstants
         public const int MaxPrice = 50_000_000;
         public const int MaxItemTreeSize = 100;
         public const int MaxAssortStackSize = 200_000;
-        public const int ListingDurationHours = 168;
+        public const int ListingDurationHours = 6;
         public const int ListingDurationSeconds = ListingDurationHours * 3600;
     }
 
