@@ -146,14 +146,41 @@ public class WorkshopContractSyncService(
 
             foreach (var (id, definition) in definitions)
             {
-                if (existingDefinitions.TryGetValue(id, out var existingDefinition)
+                var existingDefinition = existingDefinitions.GetValueOrDefault(id);
+                if (existingDefinition is not null
                     && !existingDefinition.Keep
                     && string.Equals(existingDefinition.Status, ContractStatus.Expired, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
 
-                if (!ShouldUpdate(existingDefinitions.GetValueOrDefault(id)?.UpdatedAt, definition.UpdatedAt))
+                var shouldUpdate = ShouldUpdate(existingDefinition?.UpdatedAt, definition.UpdatedAt);
+
+                if (existingDefinition is not null)
+                {
+                    if (string.IsNullOrWhiteSpace(definition.StartedMessage) && !string.IsNullOrWhiteSpace(existingDefinition.StartedMessage))
+                    {
+                        definition.StartedMessage = existingDefinition.StartedMessage;
+                    }
+                    if (string.IsNullOrWhiteSpace(definition.SuccessMessage) && !string.IsNullOrWhiteSpace(existingDefinition.SuccessMessage))
+                    {
+                        definition.SuccessMessage = existingDefinition.SuccessMessage;
+                    }
+                    if (string.IsNullOrWhiteSpace(definition.FailMessage) && !string.IsNullOrWhiteSpace(existingDefinition.FailMessage))
+                    {
+                        definition.FailMessage = existingDefinition.FailMessage;
+                    }
+
+                    if (!shouldUpdate &&
+                        (!string.Equals(existingDefinition.StartedMessage, definition.StartedMessage, StringComparison.Ordinal) ||
+                         !string.Equals(existingDefinition.SuccessMessage, definition.SuccessMessage, StringComparison.Ordinal) ||
+                         !string.Equals(existingDefinition.FailMessage, definition.FailMessage, StringComparison.Ordinal)))
+                    {
+                        shouldUpdate = true;
+                    }
+                }
+
+                if (!shouldUpdate)
                 {
                     continue;
                 }
@@ -230,6 +257,8 @@ public class WorkshopContractSyncService(
 
         var id = idElement.GetString()!;
         var now = Timestamp.GetCurrentTimestamp();
+        var createdAt = GetTimestamp(element, "created_at");
+        var approvedAt = GetTimestamp(element, "approved_at");
 
         var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -254,9 +283,9 @@ public class WorkshopContractSyncService(
             Id = id,
             Title = GetString(element, "title") ?? string.Empty,
             Description = GetString(element, "description") ?? string.Empty,
-            StartedMessage = GetString(element, "started_message") ?? string.Empty,
-            SuccessMessage = GetString(element, "success_message") ?? string.Empty,
-            FailMessage = GetString(element, "fail_message") ?? string.Empty,
+            StartedMessage = GetStringFirst(element, "started_message", "startedMessage") ?? string.Empty,
+            SuccessMessage = GetStringFirst(element, "success_message", "successMessage") ?? string.Empty,
+            FailMessage = GetStringFirst(element, "fail_message", "failMessage") ?? string.Empty,
             Status = GetString(element, "status") ?? ContractStatus.Approved,
             RecurrenceType = GetString(element, "recurrence_type") ?? ContractRecurrenceType.OneTime,
             CreatedBy = GetString(element, "created_by") ?? string.Empty,
@@ -273,16 +302,16 @@ public class WorkshopContractSyncService(
             Upvotes = GetInt(element, "upvotes") ?? 0,
             Downvotes = GetInt(element, "downvotes") ?? 0,
             ApprovalRatio = GetDouble(element, "approval_ratio"),
-            CreatedAt = GetTimestamp(element, "created_at"),
+            CreatedAt = createdAt,
             VotingEndsAt = GetTimestamp(element, "voting_ends_at"),
-            ApprovedAt = GetTimestamp(element, "approved_at"),
+            ApprovedAt = approvedAt,
             ScheduledStartAt = GetTimestamp(element, "scheduled_start_at"),
             ScheduledEndAt = GetTimestamp(element, "scheduled_end_at"),
             ActivatedAt = GetTimestamp(element, "activated_at"),
             ExpiredAt = GetTimestamp(element, "expired_at"),
             RejectedAt = GetTimestamp(element, "rejected_at"),
             LastUsedAt = GetTimestamp(element, "last_used_at"),
-            UpdatedAt = GetTimestamp(element, "updated_at") ?? now,
+            UpdatedAt = GetTimestamp(element, "updated_at") ?? approvedAt ?? createdAt ?? now,
             ValidationErrors = MapStringArray(element, "validation_errors"),
             Metadata = metadata
         };
@@ -294,6 +323,7 @@ public class WorkshopContractSyncService(
     {
         var id = string.IsNullOrWhiteSpace(scheduleId) ? Guid.NewGuid().ToString("N") : scheduleId;
         var endAt = GetTimestamp(element, "end_at");
+        Timestamp? createdAt = GetTimestamp(element, "created_at") ?? Timestamp.GetCurrentTimestamp();
 
         if (endAt?.ToDateTime() <= DateTime.UtcNow)
         {
@@ -314,8 +344,8 @@ public class WorkshopContractSyncService(
             ExpiresAt = GetTimestamp(element, "expires_at") ?? endAt,
             ExpiredAt = GetTimestamp(element, "expired_at"),
             AdminCreated = false,
-            CreatedAt = GetTimestamp(element, "created_at") ?? Timestamp.GetCurrentTimestamp(),
-            UpdatedAt = GetTimestamp(element, "updated_at") ?? Timestamp.GetCurrentTimestamp(),
+            CreatedAt = createdAt,
+            UpdatedAt = GetTimestamp(element, "updated_at") ?? createdAt ?? Timestamp.GetCurrentTimestamp(),
             QuestId = string.IsNullOrWhiteSpace(GetString(element, "quest_id")) ? GenerateQuestId() : GetString(element, "quest_id")
         };
 
@@ -330,14 +360,15 @@ public class WorkshopContractSyncService(
         }
 
         var id = idElement.GetString()!;
+        var submittedAt = GetTimestamp(element, "submitted_at");
         var submission = new ContractSubmission
         {
             Id = id,
             Title = GetString(element, "title") ?? string.Empty,
             Description = GetString(element, "description") ?? string.Empty,
-            StartedMessage = GetString(element, "started_message") ?? string.Empty,
-            SuccessMessage = GetString(element, "success_message") ?? string.Empty,
-            FailMessage = GetString(element, "fail_message") ?? string.Empty,
+            StartedMessage = GetStringFirst(element, "started_message", "startedMessage") ?? string.Empty,
+            SuccessMessage = GetStringFirst(element, "success_message", "successMessage") ?? string.Empty,
+            FailMessage = GetStringFirst(element, "fail_message", "failMessage") ?? string.Empty,
             CreatedBy = GetString(element, "created_by") ?? string.Empty,
             AuthorUid = GetString(element, "author_uid") ?? string.Empty,
             Source = "workshop",
@@ -353,11 +384,11 @@ public class WorkshopContractSyncService(
             ApprovalRatio = GetDouble(element, "approval_ratio"),
             Status = GetString(element, "status") ?? ContractStatus.PendingVote,
             RecurrenceType = GetString(element, "recurrence_type") ?? ContractRecurrenceType.OneTime,
-            SubmittedAt = GetTimestamp(element, "submitted_at"),
+            SubmittedAt = submittedAt,
             VotingEndsAt = GetTimestamp(element, "voting_ends_at"),
             ApprovedAt = GetTimestamp(element, "approved_at"),
             RejectedAt = GetTimestamp(element, "rejected_at"),
-            UpdatedAt = GetTimestamp(element, "updated_at") ?? Timestamp.GetCurrentTimestamp(),
+            UpdatedAt = GetTimestamp(element, "updated_at") ?? submittedAt ?? Timestamp.GetCurrentTimestamp(),
             ValidationErrors = MapStringArray(element, "validation_errors")
         };
 
@@ -477,6 +508,20 @@ public class WorkshopContractSyncService(
         }
 
         return property.GetString();
+    }
+
+    private static string? GetStringFirst(JsonElement element, params string[] propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+        {
+            var value = GetString(element, propertyName);
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return null;
     }
 
     private static bool GetBool(JsonElement element, string propertyName)

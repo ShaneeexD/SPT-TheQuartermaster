@@ -3,7 +3,6 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using SPTarkov.Server.Core.Helpers;
 using SPTarkov.Server.Core.Models.Common;
 using SPTarkov.Server.Core.Models.Enums;
 using TheQuartermaster.Server.Models.Contracts;
@@ -54,8 +53,7 @@ public static class ContractQuestBuilder
         string outputBaseDir,
         string traderId,
         List<ContractScheduleEntry> activeEntries,
-        Dictionary<string, ContractDefinition> definitionsById,
-        ItemHelper itemHelper
+        Dictionary<string, ContractDefinition> definitionsById
     )
     {
         if (activeEntries.Count == 0)
@@ -101,7 +99,7 @@ public static class ContractQuestBuilder
             var questId = !string.IsNullOrWhiteSpace(entry.QuestId)
                 ? entry.QuestId
                 : GenerateQuestId();
-            var quest = BuildQuest(questId, definition, entry, allLocales, itemHelper);
+            var quest = BuildQuest(questId, definition, entry, allLocales);
             quest["image"] = "/files/quest/icon/quest.png";
             allQuests[questId] = quest;
             count++;
@@ -118,8 +116,7 @@ public static class ContractQuestBuilder
         string questId,
         ContractDefinition definition,
         ContractScheduleEntry entry,
-        JsonObject locales,
-        ItemHelper itemHelper
+        JsonObject locales
     )
     {
         var questType = DetermineQuestType(definition.Objectives);
@@ -147,7 +144,7 @@ public static class ContractQuestBuilder
         var conditionIndex = 0;
         for (var i = 0; i < definition.Objectives.Count; i++)
         {
-            var conditions = BuildObjectiveConditions(definition.Objectives[i], i, questId, locales, itemHelper).ToList();
+            var conditions = BuildObjectiveConditions(definition.Objectives[i], i, questId, locales).ToList();
             foreach (var c in conditions)
             {
                 finishConditions.Add(c);
@@ -221,80 +218,40 @@ public static class ContractQuestBuilder
         ContractObjective objective,
         int index,
         string questId,
-        JsonObject locales,
-        ItemHelper itemHelper
+        JsonObject locales
     )
     {
         var condId = DeriveStableId($"{questId}:obj{index}:cond");
         var counterId = DeriveStableId($"{questId}:obj{index}:counter");
+        var dynamicLocale = string.IsNullOrWhiteSpace(objective.Description);
+        if (!string.IsNullOrWhiteSpace(objective.Description))
+        {
+            locales[condId] = objective.Description;
+        }
 
         switch (objective.Type)
         {
             case ContractObjectiveType.HandOverItem:
             case ContractObjectiveType.HandOverFirItem:
-                var handover = BuildHandoverCondition(objective, condId, objective.Type == ContractObjectiveType.HandOverFirItem, itemHelper);
-                locales[condId] = GetObjectiveDescription(objective, itemHelper);
+                var handover = BuildHandoverCondition(objective, condId, objective.Type == ContractObjectiveType.HandOverFirItem, dynamicLocale);
                 yield return handover;
                 break;
 
             case ContractObjectiveType.KillScavs:
             case ContractObjectiveType.KillPmcs:
             case ContractObjectiveType.KillBoss:
-                var kill = BuildKillCondition(objective, condId, counterId);
-                locales[condId] = GetObjectiveDescription(objective, itemHelper);
+                var kill = BuildKillCondition(objective, condId, counterId, dynamicLocale);
                 yield return kill;
                 break;
 
             case ContractObjectiveType.SurviveMap:
             case ContractObjectiveType.ExtractMap:
-                var survive = BuildSurviveCondition(objective, condId, counterId);
-                locales[condId] = GetObjectiveDescription(objective, itemHelper);
+                var survive = BuildSurviveCondition(objective, condId, counterId, dynamicLocale);
                 yield return survive;
                 break;
         }
     }
 
-    private static string GetObjectiveDescription(ContractObjective objective, ItemHelper itemHelper)
-    {
-        if (!string.IsNullOrWhiteSpace(objective.Description))
-        {
-            return objective.Description;
-        }
-
-        var mapSuffix = string.IsNullOrWhiteSpace(objective.TargetMap) || string.Equals(objective.TargetMap, "any", StringComparison.OrdinalIgnoreCase)
-            ? ""
-            : $" on {ToDisplayName(objective.TargetMap)}";
-
-        switch (objective.Type)
-        {
-            case ContractObjectiveType.HandOverItem:
-            case ContractObjectiveType.HandOverFirItem:
-                var itemName = GetItemName(objective.TargetTpl, itemHelper);
-                var firText = objective.Type == ContractObjectiveType.HandOverFirItem ? " (Found in Raid)" : "";
-                return $"Hand over {objective.Count}x {itemName}{firText}";
-
-            case ContractObjectiveType.KillScavs:
-                return $"Eliminate {objective.Count} Scavs{mapSuffix}";
-
-            case ContractObjectiveType.KillPmcs:
-                return $"Eliminate {objective.Count} PMCs{mapSuffix}";
-
-            case ContractObjectiveType.KillBoss:
-                var bossName = ToBossDisplayName(objective.TargetFaction);
-                return $"Eliminate {objective.Count} {bossName}{mapSuffix}";
-
-            case ContractObjectiveType.SurviveMap:
-                var surviveExtract = string.IsNullOrWhiteSpace(objective.TargetZone) ? "" : $" via {objective.TargetZone}";
-                return $"Survive and extract from {ToDisplayName(objective.TargetMap)}{surviveExtract}";
-
-            case ContractObjectiveType.ExtractMap:
-                var extract = string.IsNullOrWhiteSpace(objective.TargetZone) ? "" : $" via {objective.TargetZone}";
-                return $"Extract from {ToDisplayName(objective.TargetMap)}{extract}";
-
-            default:
-                return objective.Description;
-        }
-    }
 
     private static string ToDisplayName(string? location)
     {
@@ -332,14 +289,13 @@ public static class ContractQuestBuilder
         };
     }
 
-    private static JsonObject BuildHandoverCondition(ContractObjective objective, string condId, bool foundInRaid, ItemHelper itemHelper)
+    private static JsonObject BuildHandoverCondition(ContractObjective objective, string condId, bool foundInRaid, bool dynamicLocale)
     {
-        var itemName = GetItemName(objective.TargetTpl, itemHelper);
         return new JsonObject
         {
             ["conditionType"] = "HandoverItem",
             ["dogtagLevel"] = 0,
-            ["dynamicLocale"] = false,
+            ["dynamicLocale"] = dynamicLocale,
             ["globalQuestCounterId"] = "",
             ["id"] = condId,
             ["index"] = 0,
@@ -354,7 +310,7 @@ public static class ContractQuestBuilder
         };
     }
 
-    private static JsonObject BuildKillCondition(ContractObjective objective, string condId, string counterId)
+    private static JsonObject BuildKillCondition(ContractObjective objective, string condId, string counterId, bool dynamicLocale)
     {
         var (target, savageRole) = objective.Type switch
         {
@@ -371,7 +327,7 @@ public static class ContractQuestBuilder
             ["conditionType"] = "Kills",
             ["daytime"] = new JsonObject { ["from"] = 0, ["to"] = 0 },
             ["distance"] = new JsonObject { ["compareMethod"] = ">=", ["value"] = 0 },
-            ["dynamicLocale"] = false,
+            ["dynamicLocale"] = dynamicLocale,
             ["enemyEquipmentExclusive"] = new JsonArray(),
             ["enemyEquipmentInclusive"] = new JsonArray(),
             ["enemyHealthEffects"] = new JsonArray(),
@@ -393,7 +349,7 @@ public static class ContractQuestBuilder
             counterConditions.Add(new JsonObject
             {
                 ["conditionType"] = "Location",
-                ["dynamicLocale"] = false,
+                ["dynamicLocale"] = dynamicLocale,
                 ["id"] = DeriveStableId($"{condId}:loc"),
                 ["target"] = new JsonArray { ToBsgLocationTarget(objective.TargetMap) }
             });
@@ -409,7 +365,7 @@ public static class ContractQuestBuilder
                 ["id"] = counterId
             },
             ["doNotResetIfCounterCompleted"] = false,
-            ["dynamicLocale"] = false,
+            ["dynamicLocale"] = dynamicLocale,
             ["globalQuestCounterId"] = "",
             ["id"] = condId,
             ["index"] = 0,
@@ -421,7 +377,7 @@ public static class ContractQuestBuilder
         };
     }
 
-    private static JsonObject BuildSurviveCondition(ContractObjective objective, string condId, string counterId)
+    private static JsonObject BuildSurviveCondition(ContractObjective objective, string condId, string counterId, bool dynamicLocale)
     {
         var exitCondId = DeriveStableId($"{condId}:exit");
         var locCondId = DeriveStableId($"{condId}:loc");
@@ -431,7 +387,7 @@ public static class ContractQuestBuilder
             new JsonObject
             {
                 ["conditionType"] = "ExitStatus",
-                ["dynamicLocale"] = false,
+                ["dynamicLocale"] = dynamicLocale,
                 ["id"] = exitCondId,
                 ["status"] = new JsonArray { "Survived", "Runner" }
             }
@@ -442,7 +398,7 @@ public static class ContractQuestBuilder
             counterConditions.Add(new JsonObject
             {
                 ["conditionType"] = "Location",
-                ["dynamicLocale"] = false,
+                ["dynamicLocale"] = dynamicLocale,
                 ["id"] = locCondId,
                 ["target"] = new JsonArray { ToBsgLocationTarget(objective.TargetMap) }
             });
@@ -453,7 +409,7 @@ public static class ContractQuestBuilder
             counterConditions.Add(new JsonObject
             {
                 ["conditionType"] = "ExitName",
-                ["dynamicLocale"] = false,
+                ["dynamicLocale"] = dynamicLocale,
                 ["id"] = DeriveStableId($"{condId}:exitname"),
                 ["exitName"] = objective.TargetZone
             });
@@ -469,7 +425,7 @@ public static class ContractQuestBuilder
                 ["id"] = counterId
             },
             ["doNotResetIfCounterCompleted"] = false,
-            ["dynamicLocale"] = false,
+            ["dynamicLocale"] = dynamicLocale,
             ["globalQuestCounterId"] = "",
             ["id"] = condId,
             ["index"] = 0,
@@ -612,21 +568,6 @@ public static class ContractQuestBuilder
             : location;
     }
 
-    private static string GetItemName(string? tpl, ItemHelper itemHelper)
-    {
-        if (string.IsNullOrWhiteSpace(tpl) || !MongoId.IsValidMongoId(tpl))
-        {
-            return "item";
-        }
-
-        var item = itemHelper.GetItem(new MongoId(tpl));
-        if (item.Key && !string.IsNullOrWhiteSpace(item.Value?.Name))
-        {
-            return item.Value.Name;
-        }
-
-        return tpl;
-    }
 
     internal static string GenerateQuestId()
     {

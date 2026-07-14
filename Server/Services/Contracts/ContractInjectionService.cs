@@ -12,7 +12,6 @@ namespace TheQuartermaster.Server.Services.Contracts;
 public class ContractInjectionService(
     ISptLogger<ContractInjectionService> logger,
     WTTServerCommonLib.WTTServerCommonLib wttCommon,
-    ItemHelper itemHelper,
     ModHelper modHelper
 )
 {
@@ -50,8 +49,7 @@ public class ContractInjectionService(
             questOutputDir,
             traderId,
             activeEntries,
-            definitionsById,
-            itemHelper
+            definitionsById
         );
 
         logger.DebugInfo($"[TheQuartermaster] Built {count} community quest file(s) for trader {traderId}.");
