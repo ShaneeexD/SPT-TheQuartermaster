@@ -133,6 +133,14 @@ public class SellPatch : AbstractPatch
                     continue;
                 }
 
+                var rootItem = itemTree[0];
+                var rootTemplate = _itemHelper?.GetItem(rootItem.Template).Value;
+                if (_traderService is not null && !_traderService.CanBuyItem(rootItem.Template, rootTemplate?.Parent))
+                {
+                    _logger?.DebugWarning($"[TheQuartermaster] Skipping sell of {rootItem.Template}: not in the Quartermaster's buy filters.");
+                    continue;
+                }
+
                 foreach (var item in itemTree)
                 {
                     var quantity = (int)(item.Upd?.StackObjectsCount ?? 1);

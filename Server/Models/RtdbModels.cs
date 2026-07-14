@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using TheQuartermaster.Server;
 
 namespace TheQuartermaster.Server.Models;
 
@@ -171,4 +172,19 @@ public class RtdbCatalogueCache
 
     [JsonPropertyName("states")]
     public Dictionary<string, RtdbListingState> States { get; set; } = new();
+}
+
+public class RtdbBuyFilters
+{
+    [JsonPropertyName("buy_categories")]
+    public List<string> BuyCategories { get; set; } = [];
+
+    [JsonPropertyName("buy_items")]
+    public List<string> BuyItems { get; set; } = [];
+
+    [JsonPropertyName("buy_prohibited_categories")]
+    public List<string> BuyProhibitedCategories { get; set; } = [];
+
+    [JsonPropertyName("buy_prohibited_items")]
+    public List<string> BuyProhibitedItems { get; set; } = new(QuartermasterConstants.ExcludedTpls);
 }

@@ -65,6 +65,8 @@ public class RealtimeDatabaseService(
 
             IsEnabled = true;
             logger.DebugInfo($"[TheQuartermaster] Realtime Database initialised for {ResolveDatabaseUrl()}.");
+
+            await EnsureBuyFiltersAsync();
         }
         catch (Exception ex)
         {
@@ -114,6 +116,65 @@ public class RealtimeDatabaseService(
     private async Task<RtdbCatalogueMeta?> GetCatalogueMetaAsync()
     {
         return await GetJsonAsync<RtdbCatalogueMeta>("meta/catalogue");
+    }
+
+    public async Task<RtdbBuyFilters> GetBuyFiltersAsync()
+    {
+        if (!IsEnabled)
+        {
+            return new RtdbBuyFilters();
+        }
+
+        try
+        {
+            var filters = await GetJsonAsync<RtdbBuyFilters>("config/buyFilters");
+            return filters ?? new RtdbBuyFilters();
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Failed to load buy filters from RTDB: {ex.Message}", ex);
+            return new RtdbBuyFilters();
+        }
+    }
+
+    public async Task SaveBuyFiltersAsync(RtdbBuyFilters filters)
+    {
+        if (!IsEnabled)
+        {
+            return;
+        }
+
+        try
+        {
+            await PutJsonAsync("config/buyFilters", filters);
+            logger.DebugInfo("[TheQuartermaster] Saved buy filters to RTDB.");
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Failed to save buy filters to RTDB: {ex.Message}", ex);
+        }
+    }
+
+    public async Task EnsureBuyFiltersAsync()
+    {
+        if (!IsEnabled)
+        {
+            return;
+        }
+
+        try
+        {
+            var existing = await GetJsonAsync<RtdbBuyFilters>("config/buyFilters");
+            if (existing is null)
+            {
+                await PutJsonAsync("config/buyFilters", new RtdbBuyFilters());
+                logger.DebugInfo("[TheQuartermaster] Seeded default buy filters in RTDB.");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Failed to ensure buy filters in RTDB: {ex.Message}", ex);
+        }
     }
 
     public async Task BumpCatalogueVersionAsync()

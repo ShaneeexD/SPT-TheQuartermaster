@@ -115,4 +115,14 @@ public class MarketplaceService(
 
         return realtimeDatabaseService.RebuildCatalogueAsync();
     }
+
+    public Task<RtdbBuyFilters> GetBuyFiltersAsync()
+    {
+        return realtimeDatabaseService.GetBuyFiltersAsync();
+    }
+
+    public Task SaveBuyFiltersAsync(RtdbBuyFilters filters)
+    {
+        return realtimeDatabaseService.SaveBuyFiltersAsync(filters);
+    }
 }

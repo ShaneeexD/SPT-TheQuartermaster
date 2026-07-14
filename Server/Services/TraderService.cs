@@ -82,7 +82,8 @@ public class TraderService(
                 logger.DebugInfo($"[TheQuartermaster] Loaded {_activeListings.Count} active listings into trader assortment.");
             }
 
-            var traderBase = BuildTraderBase(modPath);
+            var buyFilters = await marketplaceService.GetBuyFiltersAsync();
+            var traderBase = BuildTraderBase(buyFilters);
             _trader = BuildTrader(traderBase);
 
             AddTraderLocales(traderBase);
@@ -144,11 +145,19 @@ public class TraderService(
         return _activeListings.FirstOrDefault(l => l.Id == listingId);
     }
 
-    private TraderBase BuildTraderBase(string modPath)
+    private TraderBase BuildTraderBase(RtdbBuyFilters buyFilters)
     {
         var allParents = new HashSet<MongoId>(databaseService.GetItems().Values.Select(i => i.Parent).Where(p => !string.IsNullOrWhiteSpace(p)));
-        var allIds = new HashSet<MongoId>(databaseService.GetItems().Keys);
-        var prohibited = new HashSet<MongoId>(QuartermasterConstants.ExcludedTpls.Select(t => new MongoId(t)));
+
+        var buyCategories = ParseMongoIdList(buyFilters.BuyCategories);
+        var buyItems = ParseMongoIdList(buyFilters.BuyItems);
+        var buyProhibitedCategories = ParseMongoIdList(buyFilters.BuyProhibitedCategories);
+        var buyProhibitedItems = ParseMongoIdList(buyFilters.BuyProhibitedItems);
+
+        // If nothing is configured, default to buying every category.
+        var itemsBuyCategory = buyCategories.Count > 0 || buyItems.Count > 0
+            ? buyCategories
+            : allParents;
 
         return new TraderBase
         {
@@ -176,13 +185,13 @@ public class TraderService(
             },
             ItemsBuy = new ItemBuyData
             {
-                Category = allParents,
-                IdList = []
+                Category = itemsBuyCategory,
+                IdList = buyItems
             },
             ItemsBuyProhibited = new ItemBuyData
             {
-                Category = [],
-                IdList = prohibited
+                Category = buyProhibitedCategories,
+                IdList = buyProhibitedItems
             },
             IsAvailableInPVE = true,
             IsCanTransferItems = false,
@@ -540,6 +549,34 @@ public class TraderService(
         }
 
         return 1;
+    }
+
+    public bool CanBuyItem(MongoId tpl, MongoId? parentCategoryId)
+    {
+        if (_trader is null)
+        {
+            return false;
+        }
+
+        var itemsBuy = _trader.Base.ItemsBuy;
+        var itemsBuyProhibited = _trader.Base.ItemsBuyProhibited;
+
+        if (itemsBuyProhibited?.IdList?.Contains(tpl) == true || (parentCategoryId.HasValue && (itemsBuyProhibited?.Category?.Contains(parentCategoryId.Value) ?? false)))
+        {
+            return false;
+        }
+
+        if (itemsBuy?.IdList?.Contains(tpl) == true || (parentCategoryId.HasValue && (itemsBuy?.Category?.Contains(parentCategoryId.Value) ?? false)))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static HashSet<MongoId> ParseMongoIdList(IEnumerable<string> ids)
+    {
+        return new HashSet<MongoId>(ids.Where(id => MongoId.IsValidMongoId(id)).Select(id => new MongoId(id)));
     }
 
     private void AddTraderLocales(TraderBase traderBase)
