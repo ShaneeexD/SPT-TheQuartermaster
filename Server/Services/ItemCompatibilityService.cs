@@ -14,7 +14,8 @@ public class ItemCompatibilityService(
     ISptLogger<ItemCompatibilityService> logger,
     BackendConfigService backendConfigService,
     VanillaAllowlistService vanillaAllowlistService,
-    ItemHelper itemHelper
+    ItemHelper itemHelper,
+    MarketplaceService marketplaceService
 )
 {
     public bool IsListingValidForUpload(List<Item> itemTree)
@@ -55,6 +56,34 @@ public class ItemCompatibilityService(
         {
             logger.DebugWarning($"[TheQuartermaster] Root item {root.Template} is not a valid item.");
             return false;
+        }
+
+        var rootTemplate = itemHelper.GetItem(root.Template).Value;
+        var rootParentId = rootTemplate?.Parent.ToString() ?? string.Empty;
+        if (root.Upd?.StackObjectsCount > 1 && !QuartermasterConstants.Marketplace.StackableParentIds.Contains(rootParentId))
+        {
+            logger.DebugWarning($"[TheQuartermaster] Root item {root.Template} is a stack but its parent category is not allowed for stacking.");
+            return false;
+        }
+
+        if (!QuartermasterConstants.Marketplace.AmmoParentIds.Contains(rootParentId))
+        {
+            var limits = marketplaceService.GetListingLimits();
+            var max = limits.MaxQuantityOverrides.TryGetValue(root.Template.ToString(), out var overrideMax) ? overrideMax : limits.DefaultMaxQuantity;
+            if (max > 0)
+            {
+                var activeListings = marketplaceService.GetActiveListings();
+                var rootTpl = root.Template.ToString();
+                var existingQuantity = activeListings
+                    .Where(l => string.Equals(l.RootTpl, rootTpl, StringComparison.OrdinalIgnoreCase))
+                    .Sum(l => RealtimeDatabaseService.GetListingQuantity(l.ItemTreeJson));
+                var newQuantity = root.Upd?.StackObjectsCount ?? 1;
+                if (existingQuantity + newQuantity > max)
+                {
+                    logger.DebugWarning($"[TheQuartermaster] Listing {rootTpl} would exceed max quantity (existing {existingQuantity}, new {newQuantity}, max {max}).");
+                    return false;
+                }
+            }
         }
 
         return true;

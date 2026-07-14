@@ -34,6 +34,13 @@ public class ListingService(
         }
 
         var root = itemTree.First();
+
+        foreach (var item in itemTree)
+        {
+            item.Upd ??= new Upd();
+            item.Upd.SpawnedInSession = false;
+        }
+
         var rootTemplate = itemHelper.GetItem(root.Template).Value;
         var name = rootTemplate?.Name ?? vanillaAllowlistService.GetVanillaName(root.Template) ?? root.Template.ToString();
         var shortName = rootTemplate?.Properties?.ShortName ?? name;

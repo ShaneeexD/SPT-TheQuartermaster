@@ -25,8 +25,21 @@ public static class QuartermasterConstants
         public const int MaxPrice = 50_000_000;
         public const int MaxItemTreeSize = 100;
         public const int MaxAssortStackSize = 200_000;
-        public const int ListingDurationHours = 6;
+        public const int ListingDurationHours = 2;
         public const int ListingDurationSeconds = ListingDurationHours * 3600;
+
+        public static readonly HashSet<string> AmmoParentIds = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "5485a8684bdc2da71d8b4567", // Ammo
+            "543be5cb4bdc2deb348b4568" // AmmoBox
+        };
+
+        public static readonly HashSet<string> StackableParentIds = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "5485a8684bdc2da71d8b4567", // Ammo
+            "543be5cb4bdc2deb348b4568", // AmmoBox
+            "5448bc234bdc2d3c308b4569" // Magazine
+        };
     }
 
     public static class Seller

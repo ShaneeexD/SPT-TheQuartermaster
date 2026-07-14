@@ -36,6 +36,21 @@ public class MarketplaceService(
         return realtimeDatabaseService.GetActiveListingsAsync();
     }
 
+    public List<QuartermasterListing> GetActiveListings()
+    {
+        if (!IsEnabled)
+        {
+            return new List<QuartermasterListing>();
+        }
+
+        if (realtimeDatabaseService.IsCacheInitialized)
+        {
+            return realtimeDatabaseService.GetCachedActiveListings();
+        }
+
+        return realtimeDatabaseService.GetActiveListingsAsync().GetAwaiter().GetResult();
+    }
+
     public Task<int> GetActiveListingCountAsync()
     {
         if (!IsEnabled)
@@ -124,5 +139,20 @@ public class MarketplaceService(
     public Task SaveBuyFiltersAsync(RtdbBuyFilters filters)
     {
         return realtimeDatabaseService.SaveBuyFiltersAsync(filters);
+    }
+
+    public RtdbListingLimits GetListingLimits()
+    {
+        return realtimeDatabaseService.GetListingLimits();
+    }
+
+    public Task<RtdbListingLimits> GetListingLimitsAsync()
+    {
+        return realtimeDatabaseService.GetListingLimitsAsync();
+    }
+
+    public Task SaveListingLimitsAsync(RtdbListingLimits limits)
+    {
+        return realtimeDatabaseService.SaveListingLimitsAsync(limits);
     }
 }

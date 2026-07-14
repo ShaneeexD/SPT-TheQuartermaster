@@ -141,20 +141,6 @@ public class SellPatch : AbstractPatch
                     continue;
                 }
 
-                foreach (var item in itemTree)
-                {
-                    var quantity = (int)(item.Upd?.StackObjectsCount ?? 1);
-                    var tpl = item.Template.ToString();
-                    if (_itemOverrideService?.TryGetPrice(tpl, out var overridePrice, out _) == true)
-                    {
-                        totalComputedPrice += overridePrice * quantity;
-                    }
-                    else if (_itemHelper is not null)
-                    {
-                        totalComputedPrice += (long)(_itemHelper.GetStaticItemPrice(item.Template) * buyMultiplier * quantity);
-                    }
-                }
-
                 var serialized = _itemCloneService?.SerializeItemTree(itemTree);
                 if (string.IsNullOrWhiteSpace(serialized))
                 {
@@ -176,7 +162,26 @@ public class SellPatch : AbstractPatch
                 if (listing is null)
                 {
                     _logger?.DebugWarning($"[TheQuartermaster] Could not create listing for item {itemIdToFind}.");
+                    _httpResponseUtil?.AppendErrorToOutput(
+                        output,
+                        $"[TheQuartermaster] Could not list item {itemIdToFind}: it may exceed the max allowed stack size.",
+                        BackendErrorCodes.OfferOutOfStock
+                    );
                     continue;
+                }
+
+                foreach (var item in itemTree)
+                {
+                    var quantity = (int)(item.Upd?.StackObjectsCount ?? 1);
+                    var tpl = item.Template.ToString();
+                    if (_itemOverrideService?.TryGetPrice(tpl, out var overridePrice, out _) == true)
+                    {
+                        totalComputedPrice += overridePrice * quantity;
+                    }
+                    else if (_itemHelper is not null)
+                    {
+                        totalComputedPrice += (long)(_itemHelper.GetStaticItemPrice(item.Template) * buyMultiplier * quantity);
+                    }
                 }
 
                 if (_configService?.Config.UploadConsent == true)

@@ -414,7 +414,12 @@ public class TraderService(
         }
 
         var template = itemHelper.GetItem(new MongoId(tpl)).Value;
-        return template?.Properties?.StackMaxSize > 1;
+        if (template?.Properties?.StackMaxSize <= 1)
+        {
+            return false;
+        }
+
+        return QuartermasterConstants.Marketplace.StackableParentIds.Contains(template?.Parent.ToString() ?? string.Empty);
     }
 
     private void AddMergedStack(TraderAssort assort, List<ProcessedListing> listings, int totalQuantity, double markup, int loyaltyLevel)
@@ -482,8 +487,7 @@ public class TraderService(
         var total = 0L;
         foreach (var item in tree)
         {
-            var quantity = item.Upd?.StackObjectsCount ?? 1;
-            total += (long)(itemHelper.GetStaticItemPrice(item.Template) * quantity);
+            total += (long)itemHelper.GetStaticItemPrice(item.Template);
         }
 
         return total;

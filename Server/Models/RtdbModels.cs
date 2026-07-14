@@ -188,3 +188,12 @@ public class RtdbBuyFilters
     [JsonPropertyName("buy_prohibited_items")]
     public List<string> BuyProhibitedItems { get; set; } = new(QuartermasterConstants.ExcludedTpls);
 }
+
+public class RtdbListingLimits
+{
+    [JsonPropertyName("default_max_quantity")]
+    public int DefaultMaxQuantity { get; set; } = 10;
+
+    [JsonPropertyName("max_quantity_overrides")]
+    public Dictionary<string, int> MaxQuantityOverrides { get; set; } = new();
+}

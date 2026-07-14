@@ -33,8 +33,15 @@ public class RealtimeDatabaseService(
     private bool _cacheInitialized;
     private string? _cachedVersion;
     private List<QuartermasterListing> _cachedListings = [];
+    private RtdbListingLimits _listingLimits = new();
 
     public bool IsEnabled { get; private set; }
+    public bool IsCacheInitialized => _cacheInitialized;
+
+    public List<QuartermasterListing> GetCachedActiveListings()
+    {
+        return _cachedListings.ToList();
+    }
     public string InstanceId => _instanceId;
 
     private const string RootPath = "quartermaster";
@@ -67,6 +74,7 @@ public class RealtimeDatabaseService(
             logger.DebugInfo($"[TheQuartermaster] Realtime Database initialised for {ResolveDatabaseUrl()}.");
 
             await EnsureBuyFiltersAsync();
+            await EnsureListingLimitsAsync();
         }
         catch (Exception ex)
         {
@@ -174,6 +182,80 @@ public class RealtimeDatabaseService(
         catch (Exception ex)
         {
             logger.Error($"[TheQuartermaster] Failed to ensure buy filters in RTDB: {ex.Message}", ex);
+        }
+    }
+
+    public RtdbListingLimits GetListingLimits()
+    {
+        return _listingLimits;
+    }
+
+    public async Task<RtdbListingLimits> GetListingLimitsAsync()
+    {
+        if (!IsEnabled)
+        {
+            return new RtdbListingLimits();
+        }
+
+        try
+        {
+            var limits = await GetJsonAsync<RtdbListingLimits>("config/listingLimits");
+            if (limits is not null)
+            {
+                _listingLimits = limits;
+            }
+
+            return _listingLimits;
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Failed to load listing limits from RTDB: {ex.Message}", ex);
+            return _listingLimits;
+        }
+    }
+
+    public async Task SaveListingLimitsAsync(RtdbListingLimits limits)
+    {
+        if (!IsEnabled)
+        {
+            return;
+        }
+
+        try
+        {
+            await PutJsonAsync("config/listingLimits", limits);
+            _listingLimits = limits;
+            logger.DebugInfo("[TheQuartermaster] Saved listing limits to RTDB.");
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Failed to save listing limits to RTDB: {ex.Message}", ex);
+        }
+    }
+
+    public async Task EnsureListingLimitsAsync()
+    {
+        if (!IsEnabled)
+        {
+            return;
+        }
+
+        try
+        {
+            var existing = await GetJsonAsync<RtdbListingLimits>("config/listingLimits");
+            if (existing is null)
+            {
+                await PutJsonAsync("config/listingLimits", _listingLimits);
+                logger.DebugInfo("[TheQuartermaster] Seeded default listing limits in RTDB.");
+            }
+            else
+            {
+                _listingLimits = existing;
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Failed to ensure listing limits in RTDB: {ex.Message}", ex);
         }
     }
 
@@ -1064,7 +1146,7 @@ public class RealtimeDatabaseService(
         };
     }
 
-    private static int GetListingQuantity(string? itemTreeJson)
+    public static int GetListingQuantity(string? itemTreeJson)
     {
         if (string.IsNullOrWhiteSpace(itemTreeJson))
         {
