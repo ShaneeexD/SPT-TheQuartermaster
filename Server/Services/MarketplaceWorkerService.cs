@@ -7,8 +7,7 @@ namespace TheQuartermaster.Server.Services;
 public class MarketplaceWorkerService(
     ISptLogger<MarketplaceWorkerService> logger,
     ConfigService configService,
-    ItemOverrideService itemOverrideService,
-    MarketplaceService marketplaceService
+    ItemOverrideService itemOverrideService
 )
 {
     private readonly SemaphoreSlim _semaphore = new(1, 1);
@@ -60,13 +59,6 @@ public class MarketplaceWorkerService(
             logger.DebugDebug("[TheQuartermaster] Marketplace worker tick started.");
 
             await itemOverrideService.RefreshAsync();
-
-            if (marketplaceService.IsEnabled)
-            {
-                await marketplaceService.CleanupExpiredListingsAsync();
-                await marketplaceService.DeleteExpiredListingsAsync();
-                await marketplaceService.CleanupSoldListingsAsync();
-            }
 
             logger.DebugDebug("[TheQuartermaster] Marketplace worker tick complete.");
         }

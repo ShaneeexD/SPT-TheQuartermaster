@@ -394,10 +394,6 @@ public class RealtimeDatabaseService(
                 }
             }
 
-            await CleanupExpiredListingsAsync();
-            await DeleteExpiredListingsAsync();
-            await CleanupSoldListingsAsync();
-
             var meta = await GetCatalogueMetaAsync();
             _lastCatalogueMeta = meta;
             var remoteVersion = meta?.Version;
