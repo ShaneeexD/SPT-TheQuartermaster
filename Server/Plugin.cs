@@ -20,7 +20,7 @@ public record QuartermasterMetadata : AbstractModMetadata
     public override string Name { get; init; } = "The Quartermaster";
     public override string Author { get; init; } = "ShaneeexD";
     public override List<string>? Contributors { get; init; } = null;
-    public override Version Version { get; init; } = new("1.0.1");
+    public override Version Version { get; init; } = QuartermasterConstants.Versions.Current;
     public override Range SptVersion { get; init; } = new Range("~4.0.13");
     public override List<string>? Incompatibilities { get; init; } = null;
     public override Dictionary<string, Range>? ModDependencies { get; init; } = null;
@@ -72,6 +72,13 @@ public class QuartermasterPlugin(
             configService.Load(_modPath);
             vanillaAllowlistService.Load(_modPath);
             await firestoreService.InitialiseAsync();
+            if (!await firestoreService.CheckModVersionAsync())
+            {
+                configService.Config.ModEnabled = false;
+                logger.Error("[TheQuartermaster] Mod version mismatch; disabling The Quartermaster.");
+                return;
+            }
+
             await marketplaceService.InitialiseAsync();
             await backendConfigService.LoadAsync();
             await traderService.RegisterTrader(_modPath);

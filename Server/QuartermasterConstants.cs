@@ -1,4 +1,5 @@
 using SPTarkov.Server.Core.Models.Common;
+using Version = SemanticVersioning.Version;
 
 namespace TheQuartermaster.Server;
 
@@ -53,6 +54,12 @@ public static class QuartermasterConstants
         public const int RefreshCooldownMinutes = 30;
     }
 
+    public static class Versions
+    {
+        public static readonly Version Current = new Version("1.0.1");
+        public const string CurrentString = "1.0.1";
+    }
+
     public static class FirestoreCollections
     {
         public const string Meta = "quartermaster_meta";
@@ -68,5 +75,6 @@ public static class QuartermasterConstants
     {
         public const string ContractConfig = "contract_config";
         public const string ContractVersion = "contract_version";
+        public const string ModVersion = "mod_version";
     }
 }
