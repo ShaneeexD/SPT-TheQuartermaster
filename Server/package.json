@@ -1,6 +1,6 @@
 {
   "name": "TheQuartermaster",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A global flea-market style trader that lets players sell and buy items through a Firestore-backed listing service.",
   "author": "ShaneeexD",
   "license": "MIT",
