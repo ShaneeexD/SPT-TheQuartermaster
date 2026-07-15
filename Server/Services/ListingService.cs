@@ -21,7 +21,8 @@ public class ListingService(
     ItemCompatibilityService itemCompatibilityService,
     ItemCloneService itemCloneService,
     ItemHelper itemHelper,
-    HandbookHelper handbookHelper
+    HandbookHelper handbookHelper,
+    ListingConfigService listingConfigService
 )
 {
     private readonly Dictionary<string, string> _sellerHashToSessionId = [];
@@ -64,7 +65,7 @@ public class ListingService(
         var requiredTpls = itemCompatibilityService.GetRequiredTemplates(itemTree).Select(t => t.ToString()).ToList();
         var isVanilla = itemCompatibilityService.IsVanilla(itemTree);
         var now = DateTime.UtcNow;
-        var expires = now.AddSeconds(QuartermasterConstants.Marketplace.ListingDurationSeconds);
+        var expires = now.AddSeconds(listingConfigService.ListingDurationSeconds);
 
         var listing = new QuartermasterListing
         {

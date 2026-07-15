@@ -56,8 +56,8 @@ public static class QuartermasterConstants
 
     public static class Versions
     {
-        public static readonly Version Current = new Version("1.0.1");
-        public const string CurrentString = "1.0.1";
+        public static readonly Version Current = new Version("1.0.2");
+        public const string CurrentString = "1.0.2";
     }
 
     public static class FirestoreCollections
@@ -76,5 +76,6 @@ public static class QuartermasterConstants
         public const string ContractConfig = "contract_config";
         public const string ContractVersion = "contract_version";
         public const string ModVersion = "mod_version";
+        public const string ListingConfig = "listing_config";
     }
 }

@@ -53,6 +53,7 @@ public class QuartermasterPlugin(
     BuyPatch buyPatch,
     TraderRefreshPatch traderRefreshPatch,
     BackendConfigService backendConfigService,
+    ListingConfigService listingConfigService,
     CommunityContractService communityContractService,
     ContractScheduler contractScheduler,
     WorkshopContractSyncService workshopContractSyncService,
@@ -81,6 +82,7 @@ public class QuartermasterPlugin(
 
             await marketplaceService.InitialiseAsync();
             await backendConfigService.LoadAsync();
+            await listingConfigService.LoadAsync();
             await traderService.RegisterTrader(_modPath);
 
             // Initial population: pull approved contracts from the workshop, schedule active slots,

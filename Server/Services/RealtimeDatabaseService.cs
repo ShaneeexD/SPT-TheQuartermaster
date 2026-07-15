@@ -16,7 +16,8 @@ namespace TheQuartermaster.Server.Services;
 public class RealtimeDatabaseService(
     ISptLogger<RealtimeDatabaseService> logger,
     ConfigService configService,
-    FirebaseAuthService firebaseAuthService
+    FirebaseAuthService firebaseAuthService,
+    ListingConfigService listingConfigService
 )
 {
     private readonly HttpClient _httpClient = new();
@@ -124,7 +125,7 @@ public class RealtimeDatabaseService(
 
             var now = DateTime.UtcNow;
             listing.CreatedAt ??= Timestamp.FromDateTime(now);
-            listing.ExpiresAt ??= Timestamp.FromDateTime(now.AddSeconds(QuartermasterConstants.Marketplace.ListingDurationSeconds));
+            listing.ExpiresAt ??= Timestamp.FromDateTime(now.AddSeconds(listingConfigService.ListingDurationSeconds));
 
             var quantity = GetListingQuantity(listing.ItemTreeJson);
             var data = ToRtdbListing(listing);
