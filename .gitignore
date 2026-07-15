@@ -108,6 +108,9 @@ rtdb.rules
 buildcommand.txt
 WebsiteContractService.cs
 changelog.md
+OLDVERSION
+data.json
+/keys
 
 # Build artifacts / logs
 *.binlog

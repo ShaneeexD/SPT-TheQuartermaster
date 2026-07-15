@@ -9,7 +9,8 @@ namespace TheQuartermaster.Server.Services.Contracts;
 [Injectable(InjectionType.Singleton)]
 public class BackendConfigService(
     ISptLogger<BackendConfigService> logger,
-    FirestoreService firestoreService
+    FirestoreService firestoreService,
+    ContractFileService contractFileService
 )
 {
     private BackendConfig _config = new();
@@ -18,6 +19,17 @@ public class BackendConfigService(
 
     public async Task LoadAsync()
     {
+        if (contractFileService.IsEnabled)
+        {
+            var fileConfig = await contractFileService.TryGetBackendConfigAsync();
+            if (fileConfig is not null)
+            {
+                _config = fileConfig;
+                logger.DebugInfo("[TheQuartermaster] Loaded backend config from contract file endpoint.");
+                return;
+            }
+        }
+
         if (!firestoreService.IsEnabled || firestoreService.Db is null)
         {
             logger.DebugWarning("[TheQuartermaster] Firestore unavailable; using default backend config.");

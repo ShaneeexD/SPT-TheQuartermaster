@@ -867,32 +867,40 @@ public class RealtimeDatabaseService(
             var orphanCount = 0;
             foreach (var (id, state) in states)
             {
-                var isExpired = string.Equals(state.Status, ListingStatus.Expired, StringComparison.OrdinalIgnoreCase);
+                var shouldDelete = string.Equals(state.Status, ListingStatus.Expired, StringComparison.OrdinalIgnoreCase);
 
-                if (!isExpired && string.Equals(state.Status, ListingStatus.Active, StringComparison.OrdinalIgnoreCase))
+                if (!shouldDelete && string.Equals(state.Status, ListingStatus.Active, StringComparison.OrdinalIgnoreCase))
                 {
                     if (state.ExpiresAt > 0 && DateTimeOffset.FromUnixTimeSeconds(state.ExpiresAt).UtcDateTime <= now)
                     {
-                        isExpired = true;
+                        shouldDelete = true;
                     }
                 }
 
-                if (!isExpired)
+                if (!shouldDelete && string.Equals(state.Status, ListingStatus.Sold, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (!availableIds.Contains(id) && !soldIds.Contains(id))
+                    if (state.ExpiresAt > 0 && DateTimeOffset.FromUnixTimeSeconds(state.ExpiresAt).UtcDateTime <= now)
                     {
-                        await DeleteJsonAsync($"listingStates/{id}");
-                        orphanCount++;
+                        shouldDelete = true;
                     }
-                    continue;
                 }
 
-                await DeleteJsonAsync($"listings/available/{id}");
-                await DeleteJsonAsync($"listings/sold/{id}");
-                await DeleteJsonAsync($"listingStates/{id}");
-                count++;
+                var hasListing = availableIds.Contains(id) || soldIds.Contains(id);
 
-                if (count >= 1000)
+                if (shouldDelete)
+                {
+                    await DeleteJsonAsync($"listings/available/{id}");
+                    await DeleteJsonAsync($"listings/sold/{id}");
+                    await DeleteJsonAsync($"listingStates/{id}");
+                    count++;
+                }
+                else if (!hasListing)
+                {
+                    await DeleteJsonAsync($"listingStates/{id}");
+                    orphanCount++;
+                }
+
+                if (count + orphanCount >= 1000)
                 {
                     break;
                 }
@@ -900,7 +908,7 @@ public class RealtimeDatabaseService(
 
             if (count > 0 || orphanCount > 0)
             {
-                logger.DebugInfo($"[TheQuartermaster] Deleted {count} expired listings and {orphanCount} orphan states from RTDB.");
+                logger.DebugInfo($"[TheQuartermaster] Deleted {count} expired/sold listings and {orphanCount} orphan states from RTDB.");
                 await BumpCatalogueVersionAsync();
             }
         }
@@ -919,11 +927,7 @@ public class RealtimeDatabaseService(
 
         try
         {
-            var soldListings = await GetDictionaryAsync<RtdbListing>("listings/sold");
-            if (soldListings is null || soldListings.Count == 0)
-            {
-                return;
-            }
+            var soldListings = await GetDictionaryAsync<RtdbListing>("listings/sold") ?? new Dictionary<string, RtdbListing>();
 
             var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var cutoff = now - 300; // 5 minutes ago
@@ -939,8 +943,11 @@ public class RealtimeDatabaseService(
                 var soldAt = listing.SoldAt;
                 if (soldAt <= 0)
                 {
-                    // Legacy entries with no sold_at — clean them up too
                     soldAt = listing.CreatedAt;
+                }
+                if (soldAt <= 0)
+                {
+                    soldAt = listing.ExpiresAt;
                 }
 
                 if (soldAt > 0 && soldAt <= cutoff)

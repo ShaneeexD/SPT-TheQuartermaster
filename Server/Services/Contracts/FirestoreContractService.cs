@@ -9,7 +9,8 @@ namespace TheQuartermaster.Server.Services.Contracts;
 [Injectable(InjectionType.Singleton)]
 public class FirestoreContractService(
     ISptLogger<FirestoreContractService> logger,
-    FirestoreService firestoreService
+    FirestoreService firestoreService,
+    ContractFileService contractFileService
 )
 {
     private FirestoreDb? Db => firestoreService.IsEnabled ? firestoreService.Db : null;
@@ -21,7 +22,9 @@ public class FirestoreContractService(
     private DateTime _cachedDefinitionsAt = DateTime.MinValue;
     private List<ContractScheduleEntry>? _cachedScheduleEntries;
     private DateTime _cachedScheduleEntriesAt = DateTime.MinValue;
-    private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(15);
+    private List<ContractSubmission>? _cachedSubmissions;
+    private DateTime _cachedSubmissionsAt = DateTime.MinValue;
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(5);
 
     private bool IsCacheFresh(DateTime cachedAt) => cachedAt != DateTime.MinValue && DateTime.UtcNow - cachedAt < CacheTtl;
 
@@ -43,8 +46,26 @@ public class FirestoreContractService(
         }
     }
 
+    private void InvalidateSubmissionsCache()
+    {
+        lock (_cacheLock)
+        {
+            _cachedSubmissions = null;
+            _cachedSubmissionsAt = DateTime.MinValue;
+        }
+    }
+
     public async Task<long> GetContractVersionAsync()
     {
+        if (contractFileService.IsEnabled)
+        {
+            var fileVersion = await contractFileService.TryGetContractVersionAsync();
+            if (fileVersion.HasValue)
+            {
+                return fileVersion.Value;
+            }
+        }
+
         if (Db is null)
         {
             return 0;
@@ -95,10 +116,32 @@ public class FirestoreContractService(
 
     public async Task<List<ContractSubmission>> GetAllSubmissionsAsync()
     {
+        if (contractFileService.IsEnabled)
+        {
+            var fileSubmissions = await contractFileService.TryGetSubmissionsAsync();
+            if (fileSubmissions is not null)
+            {
+                return fileSubmissions;
+            }
+        }
+
         var result = new List<ContractSubmission>();
         if (Db is null)
         {
             return result;
+        }
+
+        List<ContractSubmission>? cached;
+        DateTime cachedAt;
+        lock (_cacheLock)
+        {
+            cached = _cachedSubmissions;
+            cachedAt = _cachedSubmissionsAt;
+        }
+
+        if (cached is not null && IsCacheFresh(cachedAt))
+        {
+            return cached.ToList();
         }
 
         try
@@ -111,6 +154,12 @@ public class FirestoreContractService(
                 var submission = doc.ConvertTo<ContractSubmission>();
                 submission.Id = doc.Id;
                 result.Add(submission);
+            }
+
+            lock (_cacheLock)
+            {
+                _cachedSubmissions = result;
+                _cachedSubmissionsAt = DateTime.UtcNow;
             }
         }
         catch (Exception ex)
@@ -123,31 +172,15 @@ public class FirestoreContractService(
 
     public async Task<List<ContractSubmission>> GetPendingSubmissionsAsync()
     {
-        var result = new List<ContractSubmission>();
         if (Db is null)
         {
-            return result;
+            return new List<ContractSubmission>();
         }
 
-        try
-        {
-            var snapshot = await Db.Collection(QuartermasterConstants.FirestoreCollections.ContractSubmissions)
-                .WhereEqualTo("status", ContractStatus.PendingVote)
-                .GetSnapshotAsync();
-
-            foreach (var doc in snapshot.Documents)
-            {
-                var submission = doc.ConvertTo<ContractSubmission>();
-                submission.Id = doc.Id;
-                result.Add(submission);
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.Error($"[TheQuartermaster] Failed to fetch contract submissions: {ex.Message}", ex);
-        }
-
-        return result;
+        var all = await GetAllSubmissionsAsync();
+        return all
+            .Where(s => string.Equals(s.Status, ContractStatus.PendingVote, StringComparison.OrdinalIgnoreCase))
+            .ToList();
     }
 
     public async Task<ContractSubmission?> UpdateSubmissionAsync(ContractSubmission submission)
@@ -161,6 +194,7 @@ public class FirestoreContractService(
         {
             var docRef = Db.Collection(QuartermasterConstants.FirestoreCollections.ContractSubmissions).Document(submission.Id);
             await docRef.SetAsync(submission, SetOptions.MergeAll);
+            InvalidateSubmissionsCache();
             return submission;
         }
         catch (Exception ex)
@@ -323,6 +357,15 @@ public class FirestoreContractService(
 
     public async Task<List<ContractDefinition>> GetDefinitionsAsync(params string[] statuses)
     {
+        if (contractFileService.IsEnabled)
+        {
+            var fileDefinitions = await contractFileService.TryGetDefinitionsAsync();
+            if (fileDefinitions is not null)
+            {
+                return FilterDefinitions(fileDefinitions, statuses);
+            }
+        }
+
         var result = new List<ContractDefinition>();
         if (Db is null)
         {
@@ -412,6 +455,7 @@ public class FirestoreContractService(
         try
         {
             await Db.Collection(QuartermasterConstants.FirestoreCollections.ContractSubmissions).Document(submissionId).DeleteAsync();
+            InvalidateSubmissionsCache();
             return true;
         }
         catch (Exception ex)
@@ -465,6 +509,15 @@ public class FirestoreContractService(
 
     public async Task<List<ContractScheduleEntry>> GetScheduleEntriesAsync(params string[] statuses)
     {
+        if (contractFileService.IsEnabled)
+        {
+            var fileEntries = await contractFileService.TryGetScheduleEntriesAsync();
+            if (fileEntries is not null)
+            {
+                return FilterScheduleEntries(fileEntries, statuses);
+            }
+        }
+
         var result = new List<ContractScheduleEntry>();
         if (Db is null)
         {

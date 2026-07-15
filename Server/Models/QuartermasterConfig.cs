@@ -25,7 +25,7 @@ public record QuartermasterConfig
     public int WorkerIntervalMinutes { get; set; } = 5;
 
     [JsonIgnore]
-    public int CommunityContractIntervalMinutes { get; set; } = 15;
+    public int CommunityContractIntervalMinutes { get; set; } = 5;
 
     [JsonIgnore]
     public int WorkshopSyncIntervalMinutes { get; set; } = 5;
@@ -45,4 +45,10 @@ public record QuartermasterConfig
 
     [JsonIgnore]
     public string FirebaseDatabaseUrl { get; set; } = "https://spt-the-quartermaster-default-rtdb.europe-west1.firebasedatabase.app/";
+
+    // Contract file endpoint (optional). When set, the mod fetches contract data
+    // from this URL instead of reading Firestore directly, reducing Firestore reads.
+    // Falls back to Firestore if the URL is unreachable.
+    [JsonPropertyName("contractFileUrl")]
+    public string ContractFileUrl { get; set; } = "http://144.21.60.21/contracts/data.json";
 }

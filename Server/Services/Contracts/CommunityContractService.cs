@@ -31,7 +31,7 @@ public class CommunityContractService(
         var interval = TimeSpan.FromMinutes(configService.Config.CommunityContractIntervalMinutes);
         if (interval <= TimeSpan.Zero)
         {
-            interval = TimeSpan.FromMinutes(15);
+            interval = TimeSpan.FromMinutes(5);
         }
 
         logger.DebugInfo($"[TheQuartermaster] Starting community contract worker with interval {interval.TotalMinutes} minutes.");
