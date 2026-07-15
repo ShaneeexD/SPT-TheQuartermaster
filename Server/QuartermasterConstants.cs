@@ -50,6 +50,7 @@ public static class QuartermasterConstants
     public static class Timings
     {
         public const int ExpiredCleanupIntervalMinutes = 60;
+        public const int RefreshCooldownMinutes = 30;
     }
 
     public static class FirestoreCollections

@@ -35,6 +35,10 @@ public class RealtimeDatabaseService(
     private List<QuartermasterListing> _cachedListings = [];
     private RtdbListingLimits _listingLimits = new();
 
+    private static readonly TimeSpan RefreshCooldown = TimeSpan.FromMinutes(QuartermasterConstants.Timings.RefreshCooldownMinutes);
+    private DateTime _lastRefreshTime = DateTime.MinValue;
+    private RtdbCatalogueMeta? _lastCatalogueMeta;
+
     public bool IsEnabled { get; private set; }
     public bool IsCacheInitialized => _cacheInitialized;
 
@@ -305,7 +309,7 @@ public class RealtimeDatabaseService(
         try
         {
             var wasInitialized = _cacheInitialized;
-            var (listings, refreshed) = await RefreshActiveListingsIfNeededAsync();
+            var (listings, refreshed, _) = await RefreshActiveListingsIfNeededAsync();
             var versionText = _cachedVersion ?? "(none)";
             if (refreshed)
             {
@@ -328,16 +332,49 @@ public class RealtimeDatabaseService(
         }
     }
 
-    private async Task<(List<QuartermasterListing> Listings, bool Refreshed)> RefreshActiveListingsIfNeededAsync()
+    private async Task<(List<QuartermasterListing> Listings, bool Refreshed, RtdbCatalogueMeta? Meta)> RefreshActiveListingsIfNeededAsync()
     {
         await _cacheLock.WaitAsync();
         try
         {
+            if (_lastRefreshTime == DateTime.MinValue)
+            {
+                var lastRefresh = await TryLoadLastRefreshAsync();
+                if (lastRefresh.HasValue)
+                {
+                    _lastRefreshTime = lastRefresh.Value;
+                }
+            }
+
+            if (DateTime.UtcNow - _lastRefreshTime < RefreshCooldown)
+            {
+                if (_cacheInitialized)
+                {
+                    return (_cachedListings.ToList(), false, _lastCatalogueMeta);
+                }
+
+                var localCache = await TryLoadLocalCacheAsync();
+                if (localCache is not null)
+                {
+                    var cachedListings = localCache.Listings
+                        .Select(l => ToQuartermasterListing(l, null, l.Id ?? string.Empty))
+                        .ToList();
+                    _cachedListings = cachedListings;
+                    _cachedVersion = localCache.Version;
+                    _cacheInitialized = true;
+                    logger.DebugInfo("[TheQuartermaster] Catalogue cache is within cooldown; loaded from local cache.");
+                    return (cachedListings, false, _lastCatalogueMeta);
+                }
+            }
+
             var meta = await GetCatalogueMetaAsync();
+            _lastCatalogueMeta = meta;
             var remoteVersion = meta?.Version;
             if (_cacheInitialized && _cachedVersion == remoteVersion)
             {
-                return (_cachedListings.ToList(), false);
+                _lastRefreshTime = DateTime.UtcNow;
+                await SaveLastRefreshAsync();
+                return (_cachedListings.ToList(), false, meta);
             }
 
             if (!_cacheInitialized && !string.IsNullOrWhiteSpace(remoteVersion))
@@ -351,7 +388,9 @@ public class RealtimeDatabaseService(
                     _cachedListings = cachedListings;
                     _cachedVersion = remoteVersion;
                     _cacheInitialized = true;
-                    return (cachedListings, false);
+                    _lastRefreshTime = DateTime.UtcNow;
+                    await SaveLastRefreshAsync();
+                    return (cachedListings, false, meta);
                 }
             }
 
@@ -359,8 +398,10 @@ public class RealtimeDatabaseService(
             _cachedListings = listings;
             _cachedVersion = remoteVersion;
             _cacheInitialized = true;
+            _lastRefreshTime = DateTime.UtcNow;
+            await SaveLastRefreshAsync();
             await SaveCatalogueCache(listings, remoteVersion);
-            return (listings, true);
+            return (listings, true, meta);
         }
         finally
         {
@@ -812,18 +853,17 @@ public class RealtimeDatabaseService(
 
         try
         {
-            var (listings, refreshed) = await RefreshActiveListingsIfNeededAsync();
-            var meta = await GetCatalogueMetaAsync();
+            var (listings, refreshed, meta) = await RefreshActiveListingsIfNeededAsync();
+            if (!refreshed)
+            {
+                logger.DebugInfo("[TheQuartermaster] Catalogue unchanged; no rebuild needed.");
+                return;
+            }
+
             var version = meta?.Version ?? _cachedVersion;
             if (string.IsNullOrWhiteSpace(version))
             {
                 version = GetNextCatalogueVersion(meta);
-            }
-
-            if (meta is not null && !refreshed)
-            {
-                logger.DebugInfo($"[TheQuartermaster] Catalogue version {version} unchanged; no rebuild needed.");
-                return;
             }
 
             if (meta is null)
@@ -1318,6 +1358,8 @@ public class RealtimeDatabaseService(
                 _cachedListings = result.ToList();
                 _cachedVersion = cache.Version;
                 _cacheInitialized = true;
+                _lastRefreshTime = DateTime.UtcNow;
+                await SaveLastRefreshAsync();
             }
             finally
             {
@@ -1332,6 +1374,59 @@ public class RealtimeDatabaseService(
         }
 
         return result;
+    }
+
+    private class CacheRefreshData
+    {
+        [JsonPropertyName("last_refresh")]
+        public long LastRefresh { get; set; }
+    }
+
+    private async Task SaveLastRefreshAsync()
+    {
+        try
+        {
+            var cacheDir = Path.Combine(configService.ModPath, "cache");
+            Directory.CreateDirectory(cacheDir);
+
+            var data = new CacheRefreshData
+            {
+                LastRefresh = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+            };
+
+            var path = Path.Combine(cacheDir, "lastRefresh.json");
+            await File.WriteAllTextAsync(path, JsonSerializer.Serialize(data, _jsonOptions));
+        }
+        catch (Exception ex)
+        {
+            logger.DebugWarning($"[TheQuartermaster] Failed to save last refresh time: {ex.Message}");
+        }
+    }
+
+    private async Task<DateTime?> TryLoadLastRefreshAsync()
+    {
+        try
+        {
+            var path = Path.Combine(configService.ModPath, "cache", "lastRefresh.json");
+            if (!File.Exists(path))
+            {
+                return null;
+            }
+
+            var json = await File.ReadAllTextAsync(path);
+            var data = JsonSerializer.Deserialize<CacheRefreshData>(json, _jsonOptions);
+            if (data is null)
+            {
+                return null;
+            }
+
+            return DateTimeOffset.FromUnixTimeSeconds(data.LastRefresh).UtcDateTime;
+        }
+        catch (Exception ex)
+        {
+            logger.DebugDebug($"[TheQuartermaster] Failed to load last refresh time: {ex.Message}");
+            return null;
+        }
     }
 
     private string HashProfileId(string profileId)
