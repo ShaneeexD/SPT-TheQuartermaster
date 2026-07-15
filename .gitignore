@@ -112,6 +112,7 @@ OLDVERSION
 data.json
 /keys
 scp-vm.txt
+contract_sync_local.py
 
 # Build artifacts / logs
 *.binlog

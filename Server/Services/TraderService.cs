@@ -477,6 +477,11 @@ public class TraderService(
     {
         var representative = listings[0];
         var clonedTree = itemCloneService.CloneAndRemap(representative.ItemTree);
+        foreach (var item in clonedTree)
+        {
+            item.Upd ??= new Upd();
+            item.Upd.SpawnedInSession = false;
+        }
         var root = clonedTree[0];
         var assortItemId = root.Id;
 
@@ -507,6 +512,11 @@ public class TraderService(
     private void AddSingleItem(TraderAssort assort, ProcessedListing entry, double markup, int loyaltyLevel)
     {
         var clonedTree = itemCloneService.CloneAndRemap(entry.ItemTree);
+        foreach (var item in clonedTree)
+        {
+            item.Upd ??= new Upd();
+            item.Upd.SpawnedInSession = false;
+        }
         var root = clonedTree[0];
         var assortItemId = root.Id;
 
