@@ -42,29 +42,17 @@ public class MarketplaceFileService(
     };
 
     private readonly object _lock = new();
-    private MarketplaceDataBundle? _cachedBundle;
-    private DateTime _cachedAt = DateTime.MinValue;
-    private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(5);
+    private MarketplaceDataBundle? _lastBundle;
 
     public bool IsEnabled => !string.IsNullOrWhiteSpace(configService.Config.MarketplaceFileUrl);
 
     private string? FileUrl => configService.Config.MarketplaceFileUrl;
-
-    private bool IsCacheFresh => _cachedBundle is not null && DateTime.UtcNow - _cachedAt < CacheTtl;
 
     public async Task<MarketplaceDataBundle?> TryGetBundleAsync()
     {
         if (!IsEnabled || string.IsNullOrWhiteSpace(FileUrl))
         {
             return null;
-        }
-
-        lock (_lock)
-        {
-            if (IsCacheFresh)
-            {
-                return _cachedBundle;
-            }
         }
 
         try
@@ -88,8 +76,7 @@ public class MarketplaceFileService(
 
             lock (_lock)
             {
-                _cachedBundle = bundle;
-                _cachedAt = DateTime.UtcNow;
+                _lastBundle = bundle;
             }
 
             var listingCount = bundle.Listings?.Count ?? 0;
@@ -108,10 +95,10 @@ public class MarketplaceFileService(
     {
         lock (_lock)
         {
-            if (_cachedBundle is not null)
+            if (_lastBundle is not null)
             {
-                logger.DebugDebug("[TheQuartermaster] Using stale marketplace file cache as fallback.");
-                return _cachedBundle;
+                logger.DebugDebug("[TheQuartermaster] Using last known marketplace file as fallback.");
+                return _lastBundle;
             }
         }
         return null;

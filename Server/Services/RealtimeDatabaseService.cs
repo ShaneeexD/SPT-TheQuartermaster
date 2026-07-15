@@ -371,31 +371,7 @@ public class RealtimeDatabaseService(
                 }
             }
 
-            if (DateTime.UtcNow - _lastRefreshTime < RefreshCooldown)
-            {
-                var remaining = RefreshCooldown - (DateTime.UtcNow - _lastRefreshTime);
-                logger.DebugInfo($"[TheQuartermaster] RTDB refresh skipped (cooldown). {remaining.TotalMinutes:F1} minutes until next refresh allowed.");
-
-                if (_cacheInitialized)
-                {
-                    return (_cachedListings.ToList(), false, _lastCatalogueMeta);
-                }
-
-                var localCache = await TryLoadLocalCacheAsync();
-                if (localCache is not null)
-                {
-                    var cachedListings = localCache.Listings
-                        .Select(l => ToQuartermasterListing(l, null, l.Id ?? string.Empty))
-                        .ToList();
-                    _cachedListings = cachedListings;
-                    _cachedVersion = localCache.Version;
-                    _cacheInitialized = true;
-                    logger.DebugInfo("[TheQuartermaster] Catalogue cache is within cooldown; loaded from local cache.");
-                    return (cachedListings, false, _lastCatalogueMeta);
-                }
-            }
-
-            // Try marketplace file service first (reduces RTDB reads)
+            // Try marketplace file service first (bypasses cooldown - has its own cache)
             if (marketplaceFileService.IsEnabled)
             {
                 try
@@ -426,6 +402,31 @@ public class RealtimeDatabaseService(
                 catch (Exception ex)
                 {
                     logger.DebugWarning($"[TheQuartermaster] Marketplace file service failed, falling back to RTDB: {ex.Message}");
+                }
+            }
+
+            // Cooldown only applies to direct RTDB reads (fallback path)
+            if (DateTime.UtcNow - _lastRefreshTime < RefreshCooldown)
+            {
+                var remaining = RefreshCooldown - (DateTime.UtcNow - _lastRefreshTime);
+                logger.DebugInfo($"[TheQuartermaster] RTDB refresh skipped (cooldown). {remaining.TotalMinutes:F1} minutes until next refresh allowed.");
+
+                if (_cacheInitialized)
+                {
+                    return (_cachedListings.ToList(), false, _lastCatalogueMeta);
+                }
+
+                var localCache = await TryLoadLocalCacheAsync();
+                if (localCache is not null)
+                {
+                    var cachedListings = localCache.Listings
+                        .Select(l => ToQuartermasterListing(l, null, l.Id ?? string.Empty))
+                        .ToList();
+                    _cachedListings = cachedListings;
+                    _cachedVersion = localCache.Version;
+                    _cacheInitialized = true;
+                    logger.DebugInfo("[TheQuartermaster] Catalogue cache is within cooldown; loaded from local cache.");
+                    return (cachedListings, false, _lastCatalogueMeta);
                 }
             }
 
