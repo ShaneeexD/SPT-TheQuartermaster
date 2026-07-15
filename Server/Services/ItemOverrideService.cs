@@ -68,7 +68,10 @@ public class ItemOverrideService(
         }
         catch (Exception ex)
         {
-            logger.Error($"[TheQuartermaster] Failed to load item price overrides: {ex.Message}", ex);
+            if (FirestoreService.IsQuotaExhausted(ex))
+                logger.Warning("[TheQuartermaster] Failed to load item price overrides, Firestore quota exhausted.");
+            else
+                logger.Error($"[TheQuartermaster] Failed to load item price overrides: {ex.Message}", ex);
         }
     }
 

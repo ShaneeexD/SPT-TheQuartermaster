@@ -111,6 +111,7 @@ changelog.md
 OLDVERSION
 data.json
 /keys
+scp-vm.txt
 
 # Build artifacts / logs
 *.binlog

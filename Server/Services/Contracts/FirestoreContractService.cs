@@ -85,7 +85,10 @@ public class FirestoreContractService(
         }
         catch (Exception ex)
         {
-            logger.Error($"[TheQuartermaster] Failed to read contract version: {ex.Message}", ex);
+            if (FirestoreService.IsQuotaExhausted(ex))
+                logger.Warning("[TheQuartermaster] Failed to read contract version, Firestore quota exhausted.");
+            else
+                logger.Error($"[TheQuartermaster] Failed to read contract version: {ex.Message}", ex);
             return 0;
         }
     }
@@ -109,7 +112,10 @@ public class FirestoreContractService(
         }
         catch (Exception ex)
         {
-            logger.Error($"[TheQuartermaster] Failed to bump contract version: {ex.Message}", ex);
+            if (FirestoreService.IsQuotaExhausted(ex))
+                logger.DebugWarning("[TheQuartermaster] Failed to bump contract version, Firestore quota exhausted.");
+            else
+                logger.Error($"[TheQuartermaster] Failed to bump contract version: {ex.Message}", ex);
             return 0;
         }
     }
@@ -164,7 +170,10 @@ public class FirestoreContractService(
         }
         catch (Exception ex)
         {
-            logger.Error($"[TheQuartermaster] Failed to fetch all contract submissions: {ex.Message}", ex);
+            if (FirestoreService.IsQuotaExhausted(ex))
+                logger.Warning("[TheQuartermaster] Failed to fetch contract submissions, Firestore quota exhausted.");
+            else
+                logger.Error($"[TheQuartermaster] Failed to fetch all contract submissions: {ex.Message}", ex);
         }
 
         return result;
@@ -199,7 +208,10 @@ public class FirestoreContractService(
         }
         catch (Exception ex)
         {
-            logger.Error($"[TheQuartermaster] Failed to update submission {submission.Id}: {ex.Message}", ex);
+            if (FirestoreService.IsQuotaExhausted(ex))
+                logger.Warning("[TheQuartermaster] Failed to update submission, Firestore quota exhausted.");
+            else
+                logger.Error($"[TheQuartermaster] Failed to update submission {submission.Id}: {ex.Message}", ex);
             return null;
         }
     }
@@ -260,7 +272,10 @@ public class FirestoreContractService(
         }
         catch (Exception ex)
         {
-            logger.Error($"[TheQuartermaster] Failed to create contract definition from submission {submission.Id}: {ex.Message}", ex);
+            if (FirestoreService.IsQuotaExhausted(ex))
+                logger.Warning("[TheQuartermaster] Failed to create contract definition, Firestore quota exhausted.");
+            else
+                logger.Error($"[TheQuartermaster] Failed to create contract definition from submission {submission.Id}: {ex.Message}", ex);
             return null;
         }
     }
@@ -296,7 +311,10 @@ public class FirestoreContractService(
         }
         catch (Exception ex)
         {
-            logger.Error($"[TheQuartermaster] Failed to create schedule entry: {ex.Message}", ex);
+            if (FirestoreService.IsQuotaExhausted(ex))
+                logger.Warning("[TheQuartermaster] Failed to create schedule entry, Firestore quota exhausted.");
+            else
+                logger.Error($"[TheQuartermaster] Failed to create schedule entry: {ex.Message}", ex);
             return null;
         }
     }
@@ -350,7 +368,10 @@ public class FirestoreContractService(
         }
         catch (Exception ex)
         {
-            logger.Error($"[TheQuartermaster] Failed to create schedule entry for {definition.Id}: {ex.Message}", ex);
+            if (FirestoreService.IsQuotaExhausted(ex))
+                logger.Warning("[TheQuartermaster] Failed to create schedule entry, Firestore quota exhausted.");
+            else
+                logger.Error($"[TheQuartermaster] Failed to create schedule entry for {definition.Id}: {ex.Message}", ex);
             return null;
         }
     }
@@ -404,7 +425,10 @@ public class FirestoreContractService(
         }
         catch (Exception ex)
         {
-            logger.Error($"[TheQuartermaster] Failed to fetch contract definitions: {ex.Message}", ex);
+            if (FirestoreService.IsQuotaExhausted(ex))
+                logger.Warning("[TheQuartermaster] Failed to fetch contract definitions, Firestore quota exhausted.");
+            else
+                logger.Error($"[TheQuartermaster] Failed to fetch contract definitions: {ex.Message}", ex);
         }
 
         return FilterDefinitions(result, statuses);
@@ -440,7 +464,10 @@ public class FirestoreContractService(
         }
         catch (Exception ex)
         {
-            logger.Error($"[TheQuartermaster] Failed to update contract definition {definition.Id}: {ex.Message}", ex);
+            if (FirestoreService.IsQuotaExhausted(ex))
+                logger.Warning("[TheQuartermaster] Failed to update contract definition, Firestore quota exhausted.");
+            else
+                logger.Error($"[TheQuartermaster] Failed to update contract definition {definition.Id}: {ex.Message}", ex);
             return null;
         }
     }
@@ -460,7 +487,10 @@ public class FirestoreContractService(
         }
         catch (Exception ex)
         {
-            logger.Error($"[TheQuartermaster] Failed to delete submission {submissionId}: {ex.Message}", ex);
+            if (FirestoreService.IsQuotaExhausted(ex))
+                logger.Warning("[TheQuartermaster] Failed to delete submission, Firestore quota exhausted.");
+            else
+                logger.Error($"[TheQuartermaster] Failed to delete submission {submissionId}: {ex.Message}", ex);
             return false;
         }
     }
@@ -481,7 +511,10 @@ public class FirestoreContractService(
         }
         catch (Exception ex)
         {
-            logger.Error($"[TheQuartermaster] Failed to delete contract definition {definitionId}: {ex.Message}", ex);
+            if (FirestoreService.IsQuotaExhausted(ex))
+                logger.Warning("[TheQuartermaster] Failed to delete contract definition, Firestore quota exhausted.");
+            else
+                logger.Error($"[TheQuartermaster] Failed to delete contract definition {definitionId}: {ex.Message}", ex);
             return false;
         }
     }
@@ -502,7 +535,10 @@ public class FirestoreContractService(
         }
         catch (Exception ex)
         {
-            logger.Error($"[TheQuartermaster] Failed to delete schedule entry {entryId}: {ex.Message}", ex);
+            if (FirestoreService.IsQuotaExhausted(ex))
+                logger.Warning("[TheQuartermaster] Failed to delete schedule entry, Firestore quota exhausted.");
+            else
+                logger.Error($"[TheQuartermaster] Failed to delete schedule entry {entryId}: {ex.Message}", ex);
             return false;
         }
     }
@@ -556,7 +592,10 @@ public class FirestoreContractService(
         }
         catch (Exception ex)
         {
-            logger.Error($"[TheQuartermaster] Failed to fetch schedule entries: {ex.Message}", ex);
+            if (FirestoreService.IsQuotaExhausted(ex))
+                logger.Warning("[TheQuartermaster] Failed to fetch schedule entries, Firestore quota exhausted.");
+            else
+                logger.Error($"[TheQuartermaster] Failed to fetch schedule entries: {ex.Message}", ex);
         }
 
         return FilterScheduleEntries(result, statuses);
@@ -592,7 +631,10 @@ public class FirestoreContractService(
         }
         catch (Exception ex)
         {
-            logger.Error($"[TheQuartermaster] Failed to update schedule entry {entry.Id}: {ex.Message}", ex);
+            if (FirestoreService.IsQuotaExhausted(ex))
+                logger.Warning("[TheQuartermaster] Failed to update schedule entry, Firestore quota exhausted.");
+            else
+                logger.Error($"[TheQuartermaster] Failed to update schedule entry {entry.Id}: {ex.Message}", ex);
             return null;
         }
     }

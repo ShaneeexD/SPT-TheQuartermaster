@@ -26,8 +26,8 @@ public static class QuartermasterConstants
         public const int MaxPrice = 50_000_000;
         public const int MaxItemTreeSize = 100;
         public const int MaxAssortStackSize = 200_000;
-        public const int ListingDurationHours = 2;
-        public const int ListingDurationSeconds = ListingDurationHours * 3600;
+        public const int ListingDurationMinutes = 20;
+        public const int ListingDurationSeconds = ListingDurationMinutes * 60;
 
         public static readonly HashSet<string> AmmoParentIds = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -51,7 +51,7 @@ public static class QuartermasterConstants
     public static class Timings
     {
         public const int ExpiredCleanupIntervalMinutes = 60;
-        public const int RefreshCooldownMinutes = 30;
+        public const int RefreshCooldownMinutes = 5;
     }
 
     public static class Versions

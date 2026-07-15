@@ -72,7 +72,10 @@ public class ListingConfigService(
         }
         catch (Exception ex)
         {
-            logger.Error($"[TheQuartermaster] Failed to load listing config: {ex.Message}", ex);
+            if (FirestoreService.IsQuotaExhausted(ex))
+                logger.Warning("[TheQuartermaster] Failed to load listing config, Firestore quota exhausted. Using defaults.");
+            else
+                logger.Error($"[TheQuartermaster] Failed to load listing config: {ex.Message}", ex);
         }
     }
 }

@@ -1,8 +1,10 @@
 # The Quartermaster
 
-A global, player-driven second-hand marketplace for SPTarkov.
+A global, player-driven second-hand marketplace.
 
 Sell gear from your stash. Buy gear that other players have sold. Every item has a history.
+
+**You can submit and view community made contracts on my [website](https://serenity-workshop.netlify.app/contracts?tab=active) to be added to the automatic rotating quest pool**
 
 ## A Living Marketplace
 
@@ -28,11 +30,6 @@ Now it's available for you.
 
 When it's gone, it's gone.
 
-## Features
-
-- **Global listings** – Items you sell are uploaded to a shared database and appear for everyone running the mod.
-- **Dynamic pricing** – Assortment items are priced at handbook value minus 10% plus a 5% markup, with durability and quality taken into account, markup decreases with higher loyalty level down to 2%.
-- **Server-side only** – No client mod or prepatcher required.
 
 ## Community Contracts
 
@@ -62,11 +59,16 @@ You can submit and view community made contracts on my [website](https://serenit
 
 ## Important Notes
 - Trader assort is updated by your local server reading the mods online database every time you hit refresh, or when it auto refreshes by vanilla functions.
+- Modded items are fully compatible, you can sell modded items, if another user does not have the mod, it simply will not show for said user, if they do, it will show.
+- Items sold to the trader will stay there for a configured time in the backend (can change) before expiring and being deleted.
+- Contract data (quests, schedules, config) is fetched from a dedicated caching server every 5 minutes, reducing database load. If the caching server is unreachable, the mod falls back to reading directly from the database automatically.
+- Marketplace cleanup (removing expired and sold listings) is handled by a central server, so your local server doesn't need to download the full marketplace data for cleanup.
 - Quest submissions go through a voting system to ensure only quality quests are auto approved (I can still override submitted quests).
-- Voting lasts for 12 hours, and requires a minimum of 10 votes with a 70% upvote ratio, if the minimum votes are not met, the time will be extended for another 6 hours up to 48 where it will be auto rejected.
-- If someone is seen to be submitting blatantly troll quests, you will be banned from submitting again as submitting requires login via discord.
+- Voting lasts for 12 hours, and requires a minimum of (5 - can change in real time in backend) votes with a 70% upvote ratio, if the minimum votes are not met, the time will be extended for another 6 hours up to 48 where it will be auto rejected.
+- If someone is seen to be submitting blatantly troll quests, your discord id will be banned from submitting any more quests.
 - New quests are added to the trader every Day/Week/Weekend, and if high quality, will be kept in the rotating pool.
 - One time quests can also be submitted, these will then be deleted after they expire (24 hours).
+- When new quests are added, you'll receive an in-game message from The Quartermaster letting you know what's been added.
 - When new quests are added, it requires a game restart for it to be injected into your local database.
 - Brand new quests are prioritised over quests that have already been used before, this is to ensure that it stays fresh and only repeats quests when new ones are not available.
 
@@ -74,3 +76,5 @@ You can submit and view community made contracts on my [website](https://serenit
 
 - **Author:** ShaneeexD
 - **License:** MIT
+
+**READ THE [PRIVACY & NETWORK DISCLOSURE](https://github.com/ShaneeexD/SPT-TheQuartermaster/blob/main/PRIVACY_DISCLOSURE.md)**

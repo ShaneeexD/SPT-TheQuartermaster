@@ -18,6 +18,12 @@ public class FirestoreService(
     public bool IsEnabled { get; private set; }
     public FirestoreDb? Db => _db;
 
+    public static bool IsQuotaExhausted(Exception ex)
+    {
+        var msg = ex.Message;
+        return msg.Contains("ResourceExhausted") || msg.Contains("429") || msg.Contains("Quota exceeded");
+    }
+
     public async Task InitialiseAsync()
     {
         if (!configService.Config.ModEnabled)
@@ -102,6 +108,11 @@ public class FirestoreService(
         }
         catch (Exception ex)
         {
+            if (IsQuotaExhausted(ex))
+            {
+                logger.Warning("[TheQuartermaster] Failed to read mod version because Firestore quota exhausted. Marketplace still works, contracts will update when quota is reset.");
+                return true;
+            }
             logger.Error($"[TheQuartermaster] Failed to check mod version in Firestore: {ex.Message}. Disabling mod.", ex);
             return false;
         }

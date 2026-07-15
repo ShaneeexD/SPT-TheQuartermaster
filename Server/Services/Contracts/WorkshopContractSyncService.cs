@@ -217,7 +217,10 @@ public class WorkshopContractSyncService(
         }
         catch (Exception ex)
         {
-            logger.Error($"[TheQuartermaster] Workshop sync failed: {ex.Message}", ex);
+            if (FirestoreService.IsQuotaExhausted(ex))
+                logger.DebugWarning("[TheQuartermaster] Workshop sync skipped, Firestore quota exhausted.");
+            else
+                logger.Warning($"[TheQuartermaster] Workshop sync failed: {ex.Message}");
         }
         finally
         {
