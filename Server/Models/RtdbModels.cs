@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using TheQuartermaster.Server;
 
@@ -105,6 +106,7 @@ public class RtdbListingState
 public class RtdbCatalogueMeta
 {
     [JsonPropertyName("version")]
+    [JsonConverter(typeof(FlexibleStringConverter))]
     public string? Version { get; set; }
 
     [JsonPropertyName("generated_at")]
@@ -115,6 +117,31 @@ public class RtdbCatalogueMeta
 
     [JsonPropertyName("listing_count")]
     public int ListingCount { get; set; }
+}
+
+public class FlexibleStringConverter : JsonConverter<string?>
+{
+    public override string? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.Number)
+        {
+            return reader.GetInt64().ToString();
+        }
+        if (reader.TokenType == JsonTokenType.String)
+        {
+            return reader.GetString();
+        }
+        if (reader.TokenType == JsonTokenType.Null)
+        {
+            return null;
+        }
+        return JsonSerializer.Deserialize<string>(ref reader, options);
+    }
+
+    public override void Write(Utf8JsonWriter writer, string? value, JsonSerializerOptions options)
+    {
+        writer.WriteStringValue(value);
+    }
 }
 
 public class RtdbCataloguePage
