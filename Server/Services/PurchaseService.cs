@@ -73,6 +73,9 @@ public class PurchaseService(
             var representativeListing = await marketplaceService.GetListingAsync(firstAllocation.ListingId);
             if (representativeListing is null || representativeListing.Status != ListingStatus.Active || representativeListing.ExpiresAt?.ToDateTime() < DateTime.UtcNow)
             {
+                marketplaceService.RemoveListingFromCache(firstAllocation.ListingId);
+                traderService.OnListingPurchased(firstAllocation.ListingId, 0);
+
                 httpResponseUtil.AppendErrorToOutput(
                     output,
                     "[TheQuartermaster] Offer no longer available or already sold.",
@@ -195,6 +198,7 @@ public class PurchaseService(
             foreach (var (listingId, _) in reservedAllocations)
             {
                 await marketplaceService.CompleteListingPurchaseAsync(listingId, idempotencyKey);
+                traderService.OnListingPurchased(listingId, reservedAllocations.Where(a => a.ListingId == listingId).Sum(a => a.Quantity));
             }
 
             // Track this purchase against the player's per-restock limit

@@ -46,6 +46,28 @@ public class RealtimeDatabaseService(
     {
         return _cachedListings.ToList();
     }
+
+    public void AddListingToCache(QuartermasterListing listing)
+    {
+        if (!_cacheInitialized || string.IsNullOrWhiteSpace(listing.Id))
+        {
+            return;
+        }
+
+        _cachedListings.RemoveAll(l => l.Id == listing.Id);
+        _cachedListings.Add(listing);
+    }
+
+    public void RemoveListingFromCache(string listingId)
+    {
+        if (!_cacheInitialized || string.IsNullOrWhiteSpace(listingId))
+        {
+            return;
+        }
+
+        _cachedListings.RemoveAll(l => l.Id == listingId);
+    }
+
     public string InstanceId => _instanceId;
 
     private const string RootPath = "quartermaster";
@@ -114,8 +136,11 @@ public class RealtimeDatabaseService(
             await PutJsonAsync($"listingStates/{listing.Id}", state);
             await BumpCatalogueVersionAsync();
 
+            var result = ToQuartermasterListing(data, state, listing.Id);
+            AddListingToCache(result);
+
             logger.DebugDebug($"[TheQuartermaster] Uploaded listing {listing.Id} to RTDB.");
-            return ToQuartermasterListing(data, state, listing.Id);
+            return result;
         }
         catch (Exception ex)
         {
@@ -347,6 +372,9 @@ public class RealtimeDatabaseService(
 
             if (DateTime.UtcNow - _lastRefreshTime < RefreshCooldown)
             {
+                var remaining = RefreshCooldown - (DateTime.UtcNow - _lastRefreshTime);
+                logger.DebugInfo($"[TheQuartermaster] RTDB refresh skipped (cooldown). {remaining.TotalMinutes:F1} minutes until next refresh allowed.");
+
                 if (_cacheInitialized)
                 {
                     return (_cachedListings.ToList(), false, _lastCatalogueMeta);
@@ -672,6 +700,8 @@ public class RealtimeDatabaseService(
                     await PutJsonAsync($"listings/sold/{listingId}", data);
                     await DeleteJsonAsync($"listings/available/{listingId}");
                 }
+
+                RemoveListingFromCache(listingId);
             }
 
             await BumpCatalogueVersionAsync();

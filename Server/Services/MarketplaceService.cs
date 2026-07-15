@@ -26,6 +26,26 @@ public class MarketplaceService(
         return realtimeDatabaseService.UploadListingAsync(listing);
     }
 
+    public void AddListingToCache(QuartermasterListing listing)
+    {
+        if (!IsEnabled)
+        {
+            return;
+        }
+
+        realtimeDatabaseService.AddListingToCache(listing);
+    }
+
+    public void RemoveListingFromCache(string listingId)
+    {
+        if (!IsEnabled)
+        {
+            return;
+        }
+
+        realtimeDatabaseService.RemoveListingFromCache(listingId);
+    }
+
     public Task<List<QuartermasterListing>> GetActiveListingsAsync()
     {
         if (!IsEnabled)

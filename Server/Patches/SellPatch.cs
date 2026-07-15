@@ -199,6 +199,7 @@ public class SellPatch : AbstractPatch
                         continue;
                     }
 
+                    _traderService?.OnListingUploaded(uploadedListing);
                     _logger?.DebugInfo($"[TheQuartermaster] Listed item {itemIdToFind} as listing {uploadedListing.Id}.");
                 }
                 else

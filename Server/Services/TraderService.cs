@@ -145,6 +145,57 @@ public class TraderService(
         return _activeListings.FirstOrDefault(l => l.Id == listingId);
     }
 
+    public void OnListingUploaded(QuartermasterListing listing)
+    {
+        if (_trader is null || string.IsNullOrWhiteSpace(listing.Id))
+        {
+            return;
+        }
+
+        if (backendConfigService.Config.VanillaItemsOnly && !listing.IsVanilla)
+        {
+            return;
+        }
+
+        _activeListings.RemoveAll(l => l.Id == listing.Id);
+        _activeListings.Add(listing);
+
+        var (markup, loyaltyLevel) = ResolveMarkupAndLevel(null);
+        _trader.Assort = BuildAssort(markup, loyaltyLevel);
+        _trader.Base.NextResupply = (int)DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 1;
+
+        logger.DebugInfo($"[TheQuartermaster] Added listing {listing.Id} to local assort; {_activeListings.Count} active listings.");
+    }
+
+    public void OnListingPurchased(string listingId, int quantityPurchased)
+    {
+        if (_trader is null || string.IsNullOrWhiteSpace(listingId))
+        {
+            return;
+        }
+
+        var listing = _activeListings.FirstOrDefault(l => l.Id == listingId);
+        if (listing is null)
+        {
+            return;
+        }
+
+        // If the listing still has remaining quantity, we leave it in the assort.
+        // The RTDB state tracks the real remaining quantity; the next full refresh will correct the assort count.
+        // For fully sold listings, remove from the local list so the item disappears immediately.
+        var state = marketplaceService.GetListingAsync(listingId).GetAwaiter().GetResult();
+        if (state is null || state.Status == ListingStatus.Sold || state.ExpiresAt?.ToDateTime() < DateTime.UtcNow)
+        {
+            _activeListings.RemoveAll(l => l.Id == listingId);
+        }
+
+        var (markup, loyaltyLevel) = ResolveMarkupAndLevel(null);
+        _trader.Assort = BuildAssort(markup, loyaltyLevel);
+        _trader.Base.NextResupply = (int)DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 1;
+
+        logger.DebugInfo($"[TheQuartermaster] Updated local assort after purchase of {listingId}; {_activeListings.Count} active listings.");
+    }
+
     private TraderBase BuildTraderBase(RtdbBuyFilters buyFilters)
     {
         var allParents = new HashSet<MongoId>(databaseService.GetItems().Values.Select(i => i.Parent).Where(p => !string.IsNullOrWhiteSpace(p)));
