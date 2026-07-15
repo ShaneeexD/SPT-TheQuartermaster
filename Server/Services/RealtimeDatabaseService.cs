@@ -857,8 +857,14 @@ public class RealtimeDatabaseService(
                 return;
             }
 
+            var available = await GetDictionaryAsync<RtdbListing>("listings/available");
+            var sold = await GetDictionaryAsync<RtdbListing>("listings/sold");
+            var availableIds = (available?.Keys ?? new Dictionary<string, RtdbListing>().Keys).ToHashSet();
+            var soldIds = (sold?.Keys ?? new Dictionary<string, RtdbListing>().Keys).ToHashSet();
+
             var now = DateTime.UtcNow;
             var count = 0;
+            var orphanCount = 0;
             foreach (var (id, state) in states)
             {
                 var isExpired = string.Equals(state.Status, ListingStatus.Expired, StringComparison.OrdinalIgnoreCase);
@@ -873,6 +879,11 @@ public class RealtimeDatabaseService(
 
                 if (!isExpired)
                 {
+                    if (!availableIds.Contains(id) && !soldIds.Contains(id))
+                    {
+                        await DeleteJsonAsync($"listingStates/{id}");
+                        orphanCount++;
+                    }
                     continue;
                 }
 
@@ -887,9 +898,9 @@ public class RealtimeDatabaseService(
                 }
             }
 
-            if (count > 0)
+            if (count > 0 || orphanCount > 0)
             {
-                logger.DebugInfo($"[TheQuartermaster] Deleted {count} expired listings from RTDB.");
+                logger.DebugInfo($"[TheQuartermaster] Deleted {count} expired listings and {orphanCount} orphan states from RTDB.");
                 await BumpCatalogueVersionAsync();
             }
         }
