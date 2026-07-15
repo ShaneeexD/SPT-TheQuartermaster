@@ -51,4 +51,10 @@ public record QuartermasterConfig
     // Falls back to Firestore if the URL is unreachable.
     [JsonPropertyName("contractFileUrl")]
     public string ContractFileUrl { get; set; } = "http://144.21.60.21/contracts/data.json";
+
+    // Marketplace file endpoint (optional). When set, the mod fetches marketplace listings
+    // from this URL instead of reading RTDB directly, reducing RTDB reads.
+    // Falls back to direct RTDB if the URL is unreachable.
+    [JsonPropertyName("marketplaceFileUrl")]
+    public string MarketplaceFileUrl { get; set; } = "http://144.21.60.21/contracts/marketplace.json";
 }

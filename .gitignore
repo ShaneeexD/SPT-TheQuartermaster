@@ -113,6 +113,8 @@ data.json
 /keys
 scp-vm.txt
 contract_sync_local.py
+.marketplace_version
+marketplace.json
 
 # Build artifacts / logs
 *.binlog

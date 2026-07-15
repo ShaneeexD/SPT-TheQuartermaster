@@ -17,7 +17,8 @@ public class RealtimeDatabaseService(
     ISptLogger<RealtimeDatabaseService> logger,
     ConfigService configService,
     FirebaseAuthService firebaseAuthService,
-    ListingConfigService listingConfigService
+    ListingConfigService listingConfigService,
+    MarketplaceFileService marketplaceFileService
 )
 {
     private readonly HttpClient _httpClient = new();
@@ -394,6 +395,40 @@ public class RealtimeDatabaseService(
                 }
             }
 
+            // Try marketplace file service first (reduces RTDB reads)
+            if (marketplaceFileService.IsEnabled)
+            {
+                try
+                {
+                    var bundle = await marketplaceFileService.TryGetBundleAsync();
+                    if (bundle is not null && bundle.Listings is not null)
+                    {
+                        var fileVersion = bundle.Version;
+                        if (_cacheInitialized && _cachedVersion == fileVersion)
+                        {
+                            _lastRefreshTime = DateTime.UtcNow;
+                            await SaveLastRefreshAsync();
+                            return (_cachedListings.ToList(), false, _lastCatalogueMeta);
+                        }
+
+                        var fileStates = bundle.States ?? new Dictionary<string, RtdbListingState>();
+                        var fileListings = BuildListingsFromData(bundle.Listings, fileStates);
+                        _cachedListings = fileListings;
+                        _cachedVersion = fileVersion;
+                        _cacheInitialized = true;
+                        _lastRefreshTime = DateTime.UtcNow;
+                        await SaveLastRefreshAsync();
+                        await SaveCatalogueCache(fileListings, fileVersion);
+                        logger.DebugInfo($"[TheQuartermaster] Loaded {fileListings.Count} listings from marketplace file (version={fileVersion}).");
+                        return (fileListings, true, null);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.DebugWarning($"[TheQuartermaster] Marketplace file service failed, falling back to RTDB: {ex.Message}");
+                }
+            }
+
             var meta = await GetCatalogueMetaAsync();
             _lastCatalogueMeta = meta;
             var remoteVersion = meta?.Version;
@@ -455,9 +490,16 @@ public class RealtimeDatabaseService(
             return result;
         }
 
+        return BuildListingsFromData(listings, states ?? new Dictionary<string, RtdbListingState>());
+    }
+
+    private List<QuartermasterListing> BuildListingsFromData(Dictionary<string, RtdbListing> listings, Dictionary<string, RtdbListingState> states)
+    {
+        var result = new List<QuartermasterListing>();
+
         if (listings.Count == 0)
         {
-            logger.DebugInfo("[TheQuartermaster] RTDB has no active listings; trader will have 0 items.");
+            logger.DebugInfo("[TheQuartermaster] No active listings in data; trader will have 0 items.");
             return result;
         }
 
