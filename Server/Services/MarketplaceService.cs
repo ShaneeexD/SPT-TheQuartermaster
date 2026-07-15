@@ -121,6 +121,16 @@ public class MarketplaceService(
         return realtimeDatabaseService.DeleteExpiredListingsAsync();
     }
 
+    public Task CleanupSoldListingsAsync()
+    {
+        if (!IsEnabled)
+        {
+            return Task.CompletedTask;
+        }
+
+        return realtimeDatabaseService.CleanupSoldListingsAsync();
+    }
+
     public Task RebuildCatalogueAsync()
     {
         if (!IsEnabled)

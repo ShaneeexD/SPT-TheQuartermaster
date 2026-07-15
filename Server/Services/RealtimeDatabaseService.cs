@@ -112,7 +112,6 @@ public class RealtimeDatabaseService(
 
             await PutJsonAsync($"listings/available/{listing.Id}", data);
             await PutJsonAsync($"listingStates/{listing.Id}", state);
-            await PutJsonAsync(GetExpiryIndexPath(ToUnixSeconds(listing.ExpiresAt), listing.Id), true);
             await BumpCatalogueVersionAsync();
 
             logger.DebugDebug($"[TheQuartermaster] Uploaded listing {listing.Id} to RTDB.");
@@ -669,6 +668,7 @@ public class RealtimeDatabaseService(
                 var data = await GetJsonAsync<RtdbListing>($"listings/available/{listingId}");
                 if (data is not null)
                 {
+                    data.SoldAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
                     await PutJsonAsync($"listings/sold/{listingId}", data);
                     await DeleteJsonAsync($"listings/available/{listingId}");
                 }
@@ -841,6 +841,58 @@ public class RealtimeDatabaseService(
         catch (Exception ex)
         {
             logger.Error($"[TheQuartermaster] Failed to delete expired listings from RTDB: {ex.Message}", ex);
+        }
+    }
+
+    public async Task CleanupSoldListingsAsync()
+    {
+        if (!IsEnabled)
+        {
+            return;
+        }
+
+        try
+        {
+            var soldListings = await GetDictionaryAsync<RtdbListing>("listings/sold");
+            if (soldListings is null || soldListings.Count == 0)
+            {
+                return;
+            }
+
+            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var cutoff = now - 300; // 5 minutes ago
+
+            var count = 0;
+            foreach (var (id, listing) in soldListings)
+            {
+                if (listing is null)
+                {
+                    continue;
+                }
+
+                var soldAt = listing.SoldAt;
+                if (soldAt <= 0)
+                {
+                    // Legacy entries with no sold_at — clean them up too
+                    soldAt = listing.CreatedAt;
+                }
+
+                if (soldAt > 0 && soldAt <= cutoff)
+                {
+                    await DeleteJsonAsync($"listings/sold/{id}");
+                    await DeleteJsonAsync($"listingStates/{id}");
+                    count++;
+                }
+            }
+
+            if (count > 0)
+            {
+                logger.DebugInfo($"[TheQuartermaster] Cleaned up {count} sold listings older than 5 minutes.");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Failed to cleanup sold listings: {ex.Message}", ex);
         }
     }
 
@@ -1276,12 +1328,6 @@ public class RealtimeDatabaseService(
         }
 
         return next.ToString();
-    }
-
-    private static string GetExpiryIndexPath(long expiresAtSeconds, string listingId)
-    {
-        var bucket = DateTimeOffset.FromUnixTimeSeconds(expiresAtSeconds).UtcDateTime.ToString("yyyy-MM-dd-HH");
-        return $"expiryIndex/{bucket}/{listingId}";
     }
 
     private async Task SaveCatalogueCache(List<QuartermasterListing> listings, string? version)

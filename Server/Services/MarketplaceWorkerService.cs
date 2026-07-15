@@ -74,6 +74,7 @@ public class MarketplaceWorkerService(
             await itemOverrideService.RefreshAsync();
             await marketplaceService.CleanupExpiredListingsAsync();
             await marketplaceService.DeleteExpiredListingsAsync();
+            await marketplaceService.CleanupSoldListingsAsync();
 
             await realtimeDatabaseService.ReleaseCatalogueLeaseAsync();
 
