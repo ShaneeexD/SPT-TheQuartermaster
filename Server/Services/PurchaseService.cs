@@ -86,6 +86,9 @@ public class PurchaseService(
 
             if (!itemCompatibilityService.IsListingCompatibleForBuyer(representativeListing, pmcData))
             {
+                marketplaceService.RemoveListingFromCache(firstAllocation.ListingId);
+                traderService.OnListingPurchased(firstAllocation.ListingId, 0);
+
                 httpResponseUtil.AppendErrorToOutput(
                     output,
                     "[TheQuartermaster] Your profile cannot receive this item.",
