@@ -27,7 +27,6 @@ public class RealtimeDatabaseService(
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    private DateTime _lastExpiredCleanup = DateTime.MinValue;
     private string _instanceId = $"{Environment.MachineName}-{Process.GetCurrentProcess().Id}-{Guid.NewGuid():N}";
 
     private readonly SemaphoreSlim _cacheLock = new(1, 1);
@@ -394,6 +393,10 @@ public class RealtimeDatabaseService(
                     return (cachedListings, false, _lastCatalogueMeta);
                 }
             }
+
+            await CleanupExpiredListingsAsync();
+            await DeleteExpiredListingsAsync();
+            await CleanupSoldListingsAsync();
 
             var meta = await GetCatalogueMetaAsync();
             _lastCatalogueMeta = meta;
@@ -775,14 +778,6 @@ public class RealtimeDatabaseService(
             return;
         }
 
-        var now = DateTime.UtcNow;
-        if (now - _lastExpiredCleanup < TimeSpan.FromMinutes(QuartermasterConstants.Timings.ExpiredCleanupIntervalMinutes))
-        {
-            return;
-        }
-
-        _lastExpiredCleanup = now;
-
         try
         {
             var states = await GetDictionaryAsync<RtdbListingState>("listingStates");
@@ -791,7 +786,11 @@ public class RealtimeDatabaseService(
                 return;
             }
 
+            var now = DateTime.UtcNow;
             var count = 0;
+            var staleFound = 0;
+            var etagNullSkips = 0;
+            var putFailures = 0;
             foreach (var (id, state) in states)
             {
                 if (!string.Equals(state.Status, ListingStatus.Active, StringComparison.OrdinalIgnoreCase))
@@ -804,9 +803,12 @@ public class RealtimeDatabaseService(
                     continue;
                 }
 
+                staleFound++;
+
                 var (_, etag) = await GetJsonWithEtagAsync<RtdbListingState>($"listingStates/{id}");
                 if (etag is null)
                 {
+                    etagNullSkips++;
                     continue;
                 }
 
@@ -815,12 +817,18 @@ public class RealtimeDatabaseService(
                 {
                     count++;
                 }
+                else
+                {
+                    putFailures++;
+                }
 
-                if (count >= 100)
+                if (count >= 200)
                 {
                     break;
                 }
             }
+
+            logger.DebugInfo($"[TheQuartermaster] Expiry scan: {states.Count} states, {staleFound} stale-active found, {count} marked, {etagNullSkips} etag-null skips, {putFailures} put failures.");
 
             if (count > 0)
             {
@@ -849,10 +857,21 @@ public class RealtimeDatabaseService(
                 return;
             }
 
+            var now = DateTime.UtcNow;
             var count = 0;
             foreach (var (id, state) in states)
             {
-                if (!string.Equals(state.Status, ListingStatus.Expired, StringComparison.OrdinalIgnoreCase))
+                var isExpired = string.Equals(state.Status, ListingStatus.Expired, StringComparison.OrdinalIgnoreCase);
+
+                if (!isExpired && string.Equals(state.Status, ListingStatus.Active, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (state.ExpiresAt > 0 && DateTimeOffset.FromUnixTimeSeconds(state.ExpiresAt).UtcDateTime <= now)
+                    {
+                        isExpired = true;
+                    }
+                }
+
+                if (!isExpired)
                 {
                     continue;
                 }
@@ -861,6 +880,11 @@ public class RealtimeDatabaseService(
                 await DeleteJsonAsync($"listings/sold/{id}");
                 await DeleteJsonAsync($"listingStates/{id}");
                 count++;
+
+                if (count >= 1000)
+                {
+                    break;
+                }
             }
 
             if (count > 0)
@@ -1116,6 +1140,10 @@ public class RealtimeDatabaseService(
 
         var json = await response.Content.ReadAsStringAsync();
         var etag = response.Headers.ETag?.Tag;
+        if (string.IsNullOrWhiteSpace(etag) && response.Headers.TryGetValues("ETag", out var etagValues))
+        {
+            etag = etagValues.FirstOrDefault();
+        }
         if (string.IsNullOrWhiteSpace(json) || json == "null")
         {
             return (default, etag);

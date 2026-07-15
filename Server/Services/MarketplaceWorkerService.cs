@@ -7,8 +7,6 @@ namespace TheQuartermaster.Server.Services;
 public class MarketplaceWorkerService(
     ISptLogger<MarketplaceWorkerService> logger,
     ConfigService configService,
-    MarketplaceService marketplaceService,
-    RealtimeDatabaseService realtimeDatabaseService,
     ItemOverrideService itemOverrideService
 )
 {
@@ -47,11 +45,6 @@ public class MarketplaceWorkerService(
             return;
         }
 
-        if (!marketplaceService.IsEnabled)
-        {
-            return;
-        }
-
         if (!await _semaphore.WaitAsync(0))
         {
             logger.DebugWarning("[TheQuartermaster] Marketplace worker tick already running; skipping.");
@@ -63,27 +56,15 @@ public class MarketplaceWorkerService(
             var now = DateTime.UtcNow;
             _lastTick = now;
 
-            if (!await realtimeDatabaseService.TryAcquireCatalogueLeaseAsync(TimeSpan.FromMinutes(2)))
-            {
-                logger.DebugDebug("[TheQuartermaster] Marketplace worker could not acquire RTDB lease; skipping.");
-                return;
-            }
-
             logger.DebugDebug("[TheQuartermaster] Marketplace worker tick started.");
 
             await itemOverrideService.RefreshAsync();
-            await marketplaceService.CleanupExpiredListingsAsync();
-            await marketplaceService.DeleteExpiredListingsAsync();
-            await marketplaceService.CleanupSoldListingsAsync();
-
-            await realtimeDatabaseService.ReleaseCatalogueLeaseAsync();
 
             logger.DebugDebug("[TheQuartermaster] Marketplace worker tick complete.");
         }
         catch (Exception ex)
         {
             logger.Error($"[TheQuartermaster] Marketplace worker tick failed: {ex.Message}", ex);
-            await realtimeDatabaseService.ReleaseCatalogueLeaseAsync();
         }
         finally
         {
