@@ -49,10 +49,19 @@ The Quartermaster is a community marketplace mod for SPT (Single Player Tarkov).
   - **Contract votes** (`quartermaster_votes`): Community voting data on contract submissions
   - **Meta** (`quartermaster_meta`): Contract version counter
 - **Data sent:** Contract quest data (objectives, rewards, descriptions, messages), contract metadata (author name, approval status, voting results), and config values. No player profile data or item data is stored in Firestore.
-- **Frequency:** On server startup, then periodically (every 5–15 minutes depending on the service).
+- **Frequency:** On server startup, and as a fallback if the contract caching server (see below) is unreachable. Under normal operation, the mod no longer reads Firestore directly for contract data — it reads from the caching server instead.
 - **Privacy impact:** Contract authors' display names and UIDs are stored. No SPT player profile data is sent to Firestore. The mod version check on startup sends only your installed mod version number (compared locally, not transmitted).
 
-### 4. Workshop API (External Website)
+### 4. Contract Caching Server (HTTP)
+- **URL:** `http://144.21.60.21/contracts/data.json`
+- **Purpose:** Serves a bundled JSON file containing all current contract definitions, schedule entries, submissions, and backend config. A central server reads Firestore every 5 minutes and writes this file, so individual players' servers don't need to read Firestore directly.
+- **Data sent:** None. This is a read-only HTTP GET request — no data is transmitted from your machine to the server.
+- **Data received:** A JSON document containing contract definitions, schedule entries, submissions, and backend config. This data is read into memory only — **no file is written to your disk**.
+- **Frequency:** On server startup, then every 5 minutes (cached locally for 5 minutes between fetches).
+- **Privacy impact:** None. Your IP address is visible to the server as with any HTTP request, but no personal or game data is sent. The connection is unencrypted (HTTP, not HTTPS), but no sensitive data is transmitted in either direction. If this server is unreachable, the mod automatically falls back to reading from Firestore directly.
+- **Note:** This server also performs marketplace cleanup (deleting expired and sold listings from RTDB) on behalf of all players, which was previously done by each player's server individually. This reduces bandwidth usage for all players by approximately 90%.
+
+### 5. Workshop API (External Website)
 - **URL:** Configured in backend config (default: `https://serenity-workshop.netlify.app/api/contract-list`)
 - **Purpose:** Syncs approved community contracts from the workshop website into the mod's Firestore database.
 - **Data sent:** HTTP GET requests with a query parameter `?type=active|contracts|submissions`. No POST data, no player data, no authentication tokens.
@@ -96,5 +105,7 @@ The Quartermaster mod connects to Google's cloud services to share a marketplace
 Your actual SPT profile is never sent anywhere — only a scrambled hash of your profile ID that can't be reversed to identify you. No personal information (name, email, password) is ever collected or transmitted. All connections are encrypted.
 
 The mod also periodically downloads community-created quest/contract content from a workshop website. This is a one-way download — no game data is sent to the website.
+
+As of v1.0.4, contract data is now fetched from a dedicated caching server instead of each player reading the database directly. This is a read-only request — no data is sent from your machine, and nothing is written to your disk. The caching server also handles marketplace cleanup (removing expired and sold listings) on behalf of all players, which reduces bandwidth usage for everyone. If the caching server is ever unavailable, the mod automatically falls back to reading from the database directly.
 
 You can turn off all network activity by disabling the mod in its config file.

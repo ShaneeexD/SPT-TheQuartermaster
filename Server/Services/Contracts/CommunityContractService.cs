@@ -1,5 +1,13 @@
 using SPTarkov.DI.Annotations;
+using SPTarkov.Server.Core.Helpers;
+using SPTarkov.Server.Core.Models.Common;
+using SPTarkov.Server.Core.Models.Eft.Profile;
+using SPTarkov.Server.Core.Models.Eft.Ws;
+using SPTarkov.Server.Core.Models.Enums;
 using SPTarkov.Server.Core.Models.Utils;
+using SPTarkov.Server.Core.Servers;
+using SPTarkov.Server.Core.Services;
+using SPTarkov.Server.Core.Utils;
 using TheQuartermaster.Server.Models;
 using TheQuartermaster.Server.Models.Contracts;
 using TheQuartermaster.Server.Services;
@@ -12,7 +20,10 @@ public class CommunityContractService(
     ConfigService configService,
     BackendConfigService backendConfigService,
     FirestoreContractService firestoreContractService,
-    ContractInjectionService contractInjectionService
+    ContractInjectionService contractInjectionService,
+    NotificationSendHelper notificationSendHelper,
+    SaveServer saveServer,
+    TimeUtil timeUtil
 ) : IDisposable
 {
     private readonly SemaphoreSlim _semaphore = new(1, 1);
@@ -109,6 +120,11 @@ public class CommunityContractService(
             await contractInjectionService.InjectActiveContractsAsync(activeEntries, definitions);
             _cachedVersion = version;
 
+            if (activeEntries.Count > 0)
+            {
+                NotifyPlayersOfNewContracts(activeEntries, definitions);
+            }
+
             logger.Info($"[TheQuartermaster] Community contract tick complete. {activeEntries.Count} active schedule entr(y/ies).");
         }
         catch (Exception ex)
@@ -118,6 +134,105 @@ public class CommunityContractService(
         finally
         {
             _semaphore.Release();
+        }
+    }
+
+    private void NotifyPlayersOfNewContracts(
+        List<ContractScheduleEntry> activeEntries,
+        Dictionary<string, ContractDefinition> definitionsById
+    )
+    {
+        try
+        {
+            var newContractNames = new List<string>();
+            foreach (var entry in activeEntries)
+            {
+                if (definitionsById.TryGetValue(entry.ContractDefinitionId, out var def))
+                {
+                    var prefix = entry.RecurrenceType switch
+                    {
+                        "daily" => "[DAILY] ",
+                        "weekly" => "[WEEKLY] ",
+                        "weekend" => "[WEEKEND] ",
+                        "one_time" => "[ONE TIME] ",
+                        _ => ""
+                    };
+                    newContractNames.Add($"{prefix}{def.Title}");
+                }
+            }
+
+            if (newContractNames.Count == 0)
+            {
+                return;
+            }
+
+            var messageText = newContractNames.Count == 1
+                ? $"New community contract available: {newContractNames[0]}"
+                : $"New community contracts available:\n{string.Join("\n", newContractNames.Select(n => $"• {n}"))}";
+
+            var traderId = new MongoId(QuartermasterConstants.TraderId.ToString());
+            var profiles = saveServer.GetProfiles();
+
+            foreach (var (sessionId, _) in profiles)
+            {
+                try
+                {
+                    var message = new Message
+                    {
+                        Id = new MongoId(),
+                        UserId = traderId,
+                        MessageType = MessageType.NpcTraderMessage,
+                        DateTime = timeUtil.GetTimeStamp(),
+                        Text = messageText,
+                        HasRewards = null,
+                        RewardCollected = null,
+                        Items = null,
+                    };
+
+                    var dialogueData = saveServer.GetProfile(sessionId).DialogueRecords;
+                    if (dialogueData is not null)
+                    {
+                        if (dialogueData.TryGetValue(traderId, out var dialog))
+                        {
+                            dialog.New += 1;
+                            dialog.Messages?.Add(message);
+                        }
+                        else
+                        {
+                            dialogueData[traderId] = new Dialogue
+                            {
+                                Id = traderId,
+                                Type = MessageType.NpcTraderMessage,
+                                Messages = [message],
+                                Pinned = false,
+                                New = 1,
+                                AttachmentsNew = 0,
+                                Users = null,
+                            };
+                        }
+                    }
+
+                    var notification = new WsChatMessageReceived
+                    {
+                        EventType = NotificationEventType.new_message,
+                        EventIdentifier = message.Id,
+                        DialogId = traderId,
+                        Message = message,
+                    };
+
+                    notificationSendHelper.SendMessage(sessionId, notification);
+                }
+                catch (Exception ex)
+                {
+                    logger.DebugWarning($"[TheQuartermaster] Failed to send contract notification to session {sessionId}: {ex.Message}");
+                }
+            }
+
+            logger.DebugInfo($"[TheQuartermaster] Sent contract notification to {profiles.Count} profile(s).");
+        }
+        catch (Exception ex)
+        {
+            logger.DebugWarning($"[TheQuartermaster] Failed to send contract notifications: {ex.Message}");
         }
     }
 }

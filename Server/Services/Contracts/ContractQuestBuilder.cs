@@ -166,7 +166,20 @@ public static class ContractQuestBuilder
             : definition.FailMessage;
 
         locales[$"{questId} name"] = questTitle;
-        locales[$"{questId} description"] = definition.Description;
+        var description = definition.Description;
+        if (entry.ExpiresAt is { } expiresAt)
+        {
+            var expiryUtc = expiresAt.ToDateTime();
+            var remaining = expiryUtc - DateTimeOffset.UtcNow;
+            if (remaining.TotalSeconds > 0)
+            {
+                var hours = (int)remaining.TotalHours;
+                var minutes = remaining.Minutes;
+                var timeLabel = hours > 0 ? $"{hours}h {minutes}m" : $"{minutes}m";
+                description += $"\n\nExpires in {timeLabel}";
+            }
+        }
+        locales[$"{questId} description"] = description;
         locales[$"{questId} successMessageText"] = successMessage;
         locales[$"{questId} startedMessageText"] = startedMessage;
         locales[$"{questId} failMessageText"] = failMessage;
