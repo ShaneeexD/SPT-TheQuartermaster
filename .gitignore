@@ -107,6 +107,7 @@ package-lock.json
 rtdb.rules
 buildcommand.txt
 WebsiteContractService.cs
+changelog.md
 
 # Build artifacts / logs
 *.binlog
