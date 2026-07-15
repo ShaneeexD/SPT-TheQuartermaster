@@ -36,7 +36,7 @@ public class RealtimeDatabaseService(
     private List<QuartermasterListing> _cachedListings = [];
     private RtdbListingLimits _listingLimits = new();
 
-    private static readonly TimeSpan RefreshCooldown = TimeSpan.FromMinutes(QuartermasterConstants.Timings.RefreshCooldownMinutes);
+    private TimeSpan RefreshCooldown => TimeSpan.FromMinutes(listingConfigService.RefreshCooldownMinutes);
     private DateTime _lastRefreshTime = DateTime.MinValue;
     private RtdbCatalogueMeta? _lastCatalogueMeta;
 
