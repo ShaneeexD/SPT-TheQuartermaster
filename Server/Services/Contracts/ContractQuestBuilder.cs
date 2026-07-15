@@ -173,10 +173,11 @@ public static class ContractQuestBuilder
             var remaining = expiryUtc - DateTimeOffset.UtcNow;
             if (remaining.TotalSeconds > 0)
             {
+                var expiryIso = expiryUtc.ToString("yyyy-MM-ddTHH:mm:ssZ");
                 var hours = (int)remaining.TotalHours;
                 var minutes = remaining.Minutes;
                 var timeLabel = hours > 0 ? $"{hours}h {minutes}m" : $"{minutes}m";
-                description += $"\n\nExpires in {timeLabel}";
+                description += $"\n\n[QM_EXPIRY:{expiryIso}]\nExpires in {timeLabel}";
             }
         }
         locales[$"{questId} description"] = description;

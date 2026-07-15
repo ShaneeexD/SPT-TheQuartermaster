@@ -1,12 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net471</TargetFramework>
-    <RootNamespace>YourModName.Client</RootNamespace>
+    <RootNamespace>TheQuartermaster.Client</RootNamespace>
     <LangVersion>latest</LangVersion>
     <OutputType>Library</OutputType>
-    <Version>1.0.0</Version>
+    <Version>1.0.4</Version>
     <OutputPath>bin\$(Configuration)\</OutputPath>
-    <AssemblyName>YourModName.Client</AssemblyName>
+    <AssemblyName>TheQuartermaster.Client</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
@@ -38,6 +38,20 @@
       <Private>false</Private>
     </Reference>
     <Reference Include="Microsoft.CSharp" />
+    
+    <!-- TextMeshPro -->
+    <Reference Include="Unity.TextMeshPro">
+      <HintPath>$(SPTPath)\EscapeFromTarkov_Data\Managed\Unity.TextMeshPro.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(SPTPath)\EscapeFromTarkov_Data\Managed\UnityEngine.UI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Sirenix.Serialization">
+      <HintPath>$(SPTPath)\EscapeFromTarkov_Data\Managed\Sirenix.Serialization.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     
     <!-- SPT -->
     <Reference Include="spt-reflection">
