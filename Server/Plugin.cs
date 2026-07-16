@@ -55,7 +55,6 @@ public class QuartermasterPlugin(
     BackendConfigService backendConfigService,
     ListingConfigService listingConfigService,
     CommunityContractService communityContractService,
-    ContractScheduler contractScheduler,
     WorkshopContractSyncService workshopContractSyncService,
     HttpResponseUtil httpResponseUtil
 ) : IOnLoad
@@ -96,18 +95,8 @@ public class QuartermasterPlugin(
                 logger.DebugWarning($"[TheQuartermaster] Initial workshop sync failed: {ex.Message}");
             }
 
-            try
-            {
-                await contractScheduler.TickAsync();
-            }
-            catch (Exception ex)
-            {
-                logger.DebugWarning($"[TheQuartermaster] Initial scheduler tick failed: {ex.Message}");
-            }
-
             await communityContractService.RefreshAsync(force: true);
             communityContractService.Start();
-            contractScheduler.Start();
             workshopContractSyncService.Start();
             marketplaceWorkerService.Start();
 
