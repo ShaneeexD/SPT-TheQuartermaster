@@ -239,7 +239,7 @@ public class ContractScheduler(
         var groups = allEntries
             .Where(e => !string.IsNullOrWhiteSpace(e.ContractDefinitionId))
             .GroupBy(
-                e => $"{e.ContractDefinitionId}|{e.QuestId ?? string.Empty}",
+                e => e.ContractDefinitionId!,
                 StringComparer.OrdinalIgnoreCase)
             .Where(g => g.Count() > 1)
             .ToList();

@@ -355,7 +355,7 @@ public class FirestoreContractService(
             }
 
             var duplicateQuery = scheduleCollection
-                .WhereEqualTo("status", ContractStatus.Active)
+                .WhereIn("status", new[] { ContractStatus.Active, ContractStatus.Scheduled })
                 .WhereEqualTo("contract_definition_id", entry.ContractDefinitionId)
                 .Count();
             var duplicateSnapshot = await duplicateQuery.GetSnapshotAsync();
