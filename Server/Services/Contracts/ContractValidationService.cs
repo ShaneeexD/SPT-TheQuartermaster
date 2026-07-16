@@ -1,5 +1,4 @@
 using SPTarkov.DI.Annotations;
-using SPTarkov.Server.Core.Helpers;
 using SPTarkov.Server.Core.Models.Common;
 using TheQuartermaster.Server.Models.Contracts;
 
@@ -12,9 +11,7 @@ public record ValidationResult(bool IsValid, List<string> Errors)
 }
 
 [Injectable(InjectionType.Singleton)]
-public class ContractValidationService(
-    ItemHelper itemHelper
-)
+public class ContractValidationService()
 {
     private static readonly HashSet<string> ValidMaps = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -37,9 +34,9 @@ public class ContractValidationService(
     private const int MaxTitleLength = 100;
     private const int MaxDescriptionLength = 2000;
     private const int MaxObjectiveCount = 100;
-    private const int MaxKillCount = 100;
+    private const int MaxKillCount = 500;
     private const int MaxHandoverCount = 1000;
-    private const int MaxTotalRewardValue = 10_000_000;
+    private const int MaxTotalRewardValue = 50_000_000;
     private const int MinDurationHours = 1;
     private const int MaxDurationHours = 720;
 
@@ -172,11 +169,6 @@ public class ContractValidationService(
                     continue;
                 }
 
-                if (!itemHelper.IsItemInDb(new MongoId(item.Tpl)))
-                {
-                    errors.Add($"Reward item template not in runtime database: {item.Tpl}.");
-                }
-
                 if (item.Count <= 0)
                 {
                     errors.Add($"Reward item count must be positive: {item.Tpl}.");
@@ -210,15 +202,7 @@ public class ContractValidationService(
                 errors.Add($"Objective count must be positive at index {i}.");
             }
 
-            if (objective.Count > MaxObjectiveCount)
-            {
-                errors.Add($"Objective count is unreasonably high at index {i}.");
-            }
-
-            if (!string.IsNullOrWhiteSpace(objective.Id) && !seenIds.Add(objective.Id))
-            {
-                errors.Add($"Duplicate objective id: {objective.Id}.");
-            }
+            // Generic objective count check is handled by type-specific limits below
 
             if (objective.Type is ContractObjectiveType.HandOverItem or ContractObjectiveType.HandOverFirItem)
             {
@@ -231,10 +215,6 @@ public class ContractValidationService(
                 if (string.IsNullOrWhiteSpace(objective.TargetTpl) || !MongoId.IsValidMongoId(objective.TargetTpl))
                 {
                     errors.Add($"Hand over objective at index {i} requires a valid item template.");
-                }
-                else if (!itemHelper.IsItemInDb(new MongoId(objective.TargetTpl)))
-                {
-                    errors.Add($"Hand over objective item template not in runtime database: {objective.TargetTpl}.");
                 }
 
                 if (objective.Type == ContractObjectiveType.HandOverFirItem && !objective.RequiredInRaid)

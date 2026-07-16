@@ -16,7 +16,6 @@ public class ContractScheduler(
     ConfigService configService,
     BackendConfigService backendConfigService,
     FirestoreContractService firestoreContractService,
-    ContractVotingService contractVotingService,
     WebsiteContractService websiteContractService
 ) : IDisposable
 {
@@ -72,7 +71,6 @@ public class ContractScheduler(
             await ExpireActiveEntriesAsync();
             await DeleteExpiredDefinitionsAsync();
             await RemoveDuplicateScheduleEntriesAsync();
-            await contractVotingService.ProcessPendingSubmissionsAsync();
 
             if (!backendConfigService.Config.AllowAutoScheduling)
             {
