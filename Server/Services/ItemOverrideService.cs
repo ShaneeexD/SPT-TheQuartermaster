@@ -2,13 +2,15 @@ using Google.Cloud.Firestore;
 using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.Models.Utils;
 using TheQuartermaster.Server.Models;
+using TheQuartermaster.Server.Services.Contracts;
 
 namespace TheQuartermaster.Server.Services;
 
 [Injectable(InjectionType.Singleton)]
 public class ItemOverrideService(
     ISptLogger<ItemOverrideService> logger,
-    FirestoreService firestoreService
+    FirestoreService firestoreService,
+    ContractFileService contractFileService
 )
 {
     private const string CollectionName = "quartermaster_item_overrides";
@@ -22,17 +24,48 @@ public class ItemOverrideService(
 
     public async Task RefreshAsync()
     {
-        if (!firestoreService.IsEnabled)
-        {
-            return;
-        }
-
         lock (_lock)
         {
             if (DateTime.UtcNow - _lastRefresh < _cacheTtl)
             {
                 return;
             }
+        }
+
+        // Try VM cache first
+        if (contractFileService.IsEnabled)
+        {
+            var fileOverrides = await contractFileService.TryGetItemOverridesAsync();
+            if (fileOverrides is not null)
+            {
+                var overrides = new Dictionary<string, ItemPriceOverride>(StringComparer.OrdinalIgnoreCase);
+                foreach (var ovr in fileOverrides.Where(o => o.Enabled))
+                {
+                    if (!string.IsNullOrWhiteSpace(ovr.Tpl))
+                    {
+                        overrides[ovr.Tpl] = ovr;
+                    }
+                }
+
+                lock (_lock)
+                {
+                    _overrides.Clear();
+                    foreach (var kvp in overrides)
+                    {
+                        _overrides[kvp.Key] = kvp.Value;
+                    }
+                    _lastRefresh = DateTime.UtcNow;
+                }
+
+                logger.DebugInfo($"[TheQuartermaster] Loaded {overrides.Count} item price override(s) from VM cache.");
+                return;
+            }
+        }
+
+        // Fall back to Firestore
+        if (!firestoreService.IsEnabled)
+        {
+            return;
         }
 
         try

@@ -18,7 +18,8 @@ public class ListingConfig
 [Injectable(InjectionType.Singleton)]
 public class ListingConfigService(
     ISptLogger<ListingConfigService> logger,
-    FirestoreService firestoreService
+    FirestoreService firestoreService,
+    ContractFileService contractFileService
 )
 {
     private int _listingDurationSeconds = QuartermasterConstants.Marketplace.ListingDurationSeconds;
@@ -29,6 +30,27 @@ public class ListingConfigService(
 
     public async Task LoadAsync()
     {
+        // Try VM cache first
+        if (contractFileService.IsEnabled)
+        {
+            var fileConfig = await contractFileService.TryGetListingConfigAsync();
+            if (fileConfig is not null)
+            {
+                if (fileConfig.ListingDurationHours > 0)
+                {
+                    _listingDurationSeconds = (int)(fileConfig.ListingDurationHours * 3600);
+                    logger.DebugInfo($"[TheQuartermaster] Loaded listing duration from VM cache: {fileConfig.ListingDurationHours} hours ({_listingDurationSeconds}s).");
+                }
+                if (fileConfig.RefreshCooldownMinutes > 0)
+                {
+                    _refreshCooldownMinutes = (int)fileConfig.RefreshCooldownMinutes;
+                    logger.DebugInfo($"[TheQuartermaster] Loaded refresh cooldown from VM cache: {fileConfig.RefreshCooldownMinutes} minutes.");
+                }
+                return;
+            }
+        }
+
+        // Fall back to Firestore
         if (!firestoreService.IsEnabled || firestoreService.Db is null)
         {
             logger.DebugWarning("[TheQuartermaster] Firestore unavailable; using default listing config.");

@@ -31,6 +31,30 @@ internal class ContractDataBundle
 
     [JsonPropertyName("backend_config")]
     public BackendConfig? BackendConfig { get; set; }
+
+    [JsonPropertyName("mod_version")]
+    public ModVersionData? ModVersion { get; set; }
+
+    [JsonPropertyName("listing_config")]
+    public ListingConfigData? ListingConfig { get; set; }
+
+    [JsonPropertyName("item_overrides")]
+    public List<ItemPriceOverride> ItemOverrides { get; set; } = [];
+}
+
+public class ModVersionData
+{
+    [JsonPropertyName("minimum_required_mod_version")]
+    public string? MinimumRequiredModVersion { get; set; }
+}
+
+public class ListingConfigData
+{
+    [JsonPropertyName("listing_duration_hours")]
+    public double ListingDurationHours { get; set; }
+
+    [JsonPropertyName("refresh_cooldown_minutes")]
+    public double RefreshCooldownMinutes { get; set; }
 }
 
 /// <summary>
@@ -112,6 +136,36 @@ public class ContractFileService(
     {
         var bundle = await TryGetBundleAsync();
         return bundle?.BackendConfig;
+    }
+
+    /// <summary>
+    /// Try to get the mod version data from the file service.
+    /// Returns null if unavailable (caller should fall back to Firestore).
+    /// </summary>
+    public async Task<ModVersionData?> TryGetModVersionAsync()
+    {
+        var bundle = await TryGetBundleAsync();
+        return bundle?.ModVersion;
+    }
+
+    /// <summary>
+    /// Try to get the listing config from the file service.
+    /// Returns null if unavailable (caller should fall back to Firestore).
+    /// </summary>
+    public async Task<ListingConfigData?> TryGetListingConfigAsync()
+    {
+        var bundle = await TryGetBundleAsync();
+        return bundle?.ListingConfig;
+    }
+
+    /// <summary>
+    /// Try to get item price overrides from the file service.
+    /// Returns null if unavailable (caller should fall back to Firestore).
+    /// </summary>
+    public async Task<List<ItemPriceOverride>?> TryGetItemOverridesAsync()
+    {
+        var bundle = await TryGetBundleAsync();
+        return bundle?.ItemOverrides;
     }
 
     private async Task<ContractDataBundle?> TryGetBundleAsync()

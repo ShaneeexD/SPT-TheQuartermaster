@@ -16,12 +16,14 @@ public class WorkshopContractSyncService(
     ISptLogger<WorkshopContractSyncService> logger,
     ConfigService configService,
     BackendConfigService backendConfigService,
-    FirestoreContractService firestoreContractService
+    FirestoreContractService firestoreContractService,
+    ContractFileService contractFileService
 ) : IDisposable
 {
     private readonly HttpClient _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
     private readonly SemaphoreSlim _semaphore = new(1, 1);
     private Timer? _timer;
+    private string? _lastApiHash;
 
     public void Start()
     {
@@ -63,6 +65,13 @@ public class WorkshopContractSyncService(
 
         try
         {
+            // Skip if VM cache is available - the cron job handles workshop sync
+            if (contractFileService.IsEnabled)
+            {
+                logger.DebugDebug("[TheQuartermaster] Workshop sync skipped; VM cache is available (cron job handles sync).");
+                return;
+            }
+
             var apiUrl = GetApiUrl();
             if (string.IsNullOrWhiteSpace(apiUrl))
             {
@@ -81,6 +90,15 @@ public class WorkshopContractSyncService(
             var activeResponse = await FetchAsync(apiUrl, "active");
             var contractsResponse = await FetchAsync(apiUrl, "contracts");
             var submissionsResponse = await FetchAsync(apiUrl, "submissions");
+
+            // Hash the raw API responses to detect changes
+            var apiHash = ComputeApiHash(activeResponse, contractsResponse, submissionsResponse);
+            if (apiHash == _lastApiHash)
+            {
+                logger.DebugDebug("[TheQuartermaster] Workshop API data unchanged since last sync; skipping.");
+                return;
+            }
+            _lastApiHash = apiHash;
 
             var definitions = new Dictionary<string, ContractDefinition>(StringComparer.OrdinalIgnoreCase);
             var schedules = new Dictionary<string, ContractScheduleEntry>(StringComparer.OrdinalIgnoreCase);
@@ -224,8 +242,19 @@ public class WorkshopContractSyncService(
         }
         finally
         {
+            await firestoreContractService.FlushVersionBumpAsync();
             _semaphore.Release();
         }
+    }
+
+    private static string ComputeApiHash(JsonDocument active, JsonDocument contracts, JsonDocument submissions)
+    {
+        var activeJson = active.RootElement.GetRawText();
+        var contractsJson = contracts.RootElement.GetRawText();
+        var submissionsJson = submissions.RootElement.GetRawText();
+        var combined = $"{activeJson}|{contractsJson}|{submissionsJson}";
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(combined));
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     private string? GetApiUrl()

@@ -84,6 +84,7 @@ public class ContractScheduler(
         }
         finally
         {
+            await firestoreContractService.FlushVersionBumpAsync();
             _semaphore.Release();
         }
     }

@@ -25,8 +25,11 @@ public class FirestoreContractService(
     private List<ContractSubmission>? _cachedSubmissions;
     private DateTime _cachedSubmissionsAt = DateTime.MinValue;
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(5);
+    private int _versionBumpPending;
 
     private bool IsCacheFresh(DateTime cachedAt) => cachedAt != DateTime.MinValue && DateTime.UtcNow - cachedAt < CacheTtl;
+
+    public void MarkVersionDirty() => Interlocked.Exchange(ref _versionBumpPending, 1);
 
     private void InvalidateDefinitionsCache()
     {
@@ -120,6 +123,15 @@ public class FirestoreContractService(
         }
     }
 
+    public async Task<long> FlushVersionBumpAsync()
+    {
+        if (Interlocked.CompareExchange(ref _versionBumpPending, 0, 1) != 1)
+        {
+            return 0;
+        }
+        return await BumpContractVersionAsync();
+    }
+
     public async Task<List<ContractSubmission>> GetAllSubmissionsAsync()
     {
         if (contractFileService.IsEnabled)
@@ -204,6 +216,7 @@ public class FirestoreContractService(
             var docRef = Db.Collection(QuartermasterConstants.FirestoreCollections.ContractSubmissions).Document(submission.Id);
             await docRef.SetAsync(submission, SetOptions.MergeAll);
             InvalidateSubmissionsCache();
+            MarkVersionDirty();
             return submission;
         }
         catch (Exception ex)
@@ -267,7 +280,7 @@ public class FirestoreContractService(
             definition.Id = docRef.Id;
             await docRef.SetAsync(definition);
             InvalidateDefinitionsCache();
-            await BumpContractVersionAsync();
+            MarkVersionDirty();
             return definition;
         }
         catch (Exception ex)
@@ -306,7 +319,7 @@ public class FirestoreContractService(
             entry.Id = docRef.Id;
             await docRef.SetAsync(entry);
             InvalidateScheduleEntriesCache();
-            await BumpContractVersionAsync();
+            MarkVersionDirty();
             return entry;
         }
         catch (Exception ex)
@@ -362,7 +375,7 @@ public class FirestoreContractService(
 
             InvalidateDefinitionsCache();
             InvalidateScheduleEntriesCache();
-            await BumpContractVersionAsync();
+            MarkVersionDirty();
 
             return entry;
         }
@@ -459,7 +472,7 @@ public class FirestoreContractService(
             var docRef = Db.Collection(QuartermasterConstants.FirestoreCollections.ContractDefinitions).Document(definition.Id);
             await docRef.SetAsync(definition, SetOptions.MergeAll);
             InvalidateDefinitionsCache();
-            await BumpContractVersionAsync();
+            MarkVersionDirty();
             return definition;
         }
         catch (Exception ex)
@@ -483,6 +496,7 @@ public class FirestoreContractService(
         {
             await Db.Collection(QuartermasterConstants.FirestoreCollections.ContractSubmissions).Document(submissionId).DeleteAsync();
             InvalidateSubmissionsCache();
+            MarkVersionDirty();
             return true;
         }
         catch (Exception ex)
@@ -506,7 +520,7 @@ public class FirestoreContractService(
         {
             await Db.Collection(QuartermasterConstants.FirestoreCollections.ContractDefinitions).Document(definitionId).DeleteAsync();
             InvalidateDefinitionsCache();
-            await BumpContractVersionAsync();
+            MarkVersionDirty();
             return true;
         }
         catch (Exception ex)
@@ -530,7 +544,7 @@ public class FirestoreContractService(
         {
             await Db.Collection(QuartermasterConstants.FirestoreCollections.ContractSchedule).Document(entryId).DeleteAsync();
             InvalidateScheduleEntriesCache();
-            await BumpContractVersionAsync();
+            MarkVersionDirty();
             return true;
         }
         catch (Exception ex)
@@ -626,7 +640,7 @@ public class FirestoreContractService(
             var docRef = Db.Collection(QuartermasterConstants.FirestoreCollections.ContractSchedule).Document(entry.Id);
             await docRef.SetAsync(entry, SetOptions.MergeAll);
             InvalidateScheduleEntriesCache();
-            await BumpContractVersionAsync();
+            MarkVersionDirty();
             return entry;
         }
         catch (Exception ex)
