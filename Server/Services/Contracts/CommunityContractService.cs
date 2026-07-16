@@ -1,3 +1,5 @@
+using System.IO;
+using System.Text.Json;
 using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.Helpers;
 using SPTarkov.Server.Core.Models.Common;
@@ -31,6 +33,9 @@ public class CommunityContractService(
     private DateTime _lastRefresh = DateTime.MinValue;
     private long _cachedVersion = -1;
     private static readonly TimeSpan MinRefreshInterval = TimeSpan.FromMinutes(1);
+    private string _versionFilePath = string.Empty;
+    private string _notifiedFilePath = string.Empty;
+    private HashSet<string> _notifiedEntryIds = [];
 
     public void Start()
     {
@@ -39,14 +44,87 @@ public class CommunityContractService(
             return;
         }
 
+        _versionFilePath = Path.Combine(configService.ModPath, "cache", "contract_version.txt");
+        _notifiedFilePath = Path.Combine(configService.ModPath, "cache", "notified_contracts.json");
+        _cachedVersion = LoadPersistedVersion();
+        _notifiedEntryIds = LoadNotifiedEntryIds();
+
         var interval = TimeSpan.FromMinutes(configService.Config.CommunityContractIntervalMinutes);
         if (interval <= TimeSpan.Zero)
         {
             interval = TimeSpan.FromMinutes(5);
         }
 
-        logger.DebugInfo($"[TheQuartermaster] Starting community contract worker with interval {interval.TotalMinutes} minutes.");
+        logger.DebugInfo($"[TheQuartermaster] Starting community contract worker with interval {interval.TotalMinutes} minutes. Last known contract version: {_cachedVersion}.");
         _timer = new Timer(_ => _ = Task.Run(TickAsync), null, TimeSpan.Zero, interval);
+    }
+
+    private long LoadPersistedVersion()
+    {
+        try
+        {
+            if (File.Exists(_versionFilePath) && long.TryParse(File.ReadAllText(_versionFilePath).Trim(), out var version))
+            {
+                return version;
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.DebugWarning($"[TheQuartermaster] Failed to load persisted contract version: {ex.Message}");
+        }
+        return -1;
+    }
+
+    private void PersistVersion(long version)
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(_versionFilePath);
+            if (!string.IsNullOrEmpty(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+            File.WriteAllText(_versionFilePath, version.ToString());
+        }
+        catch (Exception ex)
+        {
+            logger.DebugWarning($"[TheQuartermaster] Failed to persist contract version: {ex.Message}");
+        }
+    }
+
+    private HashSet<string> LoadNotifiedEntryIds()
+    {
+        try
+        {
+            if (File.Exists(_notifiedFilePath))
+            {
+                var json = File.ReadAllText(_notifiedFilePath);
+                var ids = JsonSerializer.Deserialize<List<string>>(json);
+                return ids is not null ? new HashSet<string>(ids, StringComparer.OrdinalIgnoreCase) : [];
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.DebugWarning($"[TheQuartermaster] Failed to load notified contract IDs: {ex.Message}");
+        }
+        return [];
+    }
+
+    private void PersistNotifiedEntryIds()
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(_notifiedFilePath);
+            if (!string.IsNullOrEmpty(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+            File.WriteAllText(_notifiedFilePath, JsonSerializer.Serialize(_notifiedEntryIds.ToList()));
+        }
+        catch (Exception ex)
+        {
+            logger.DebugWarning($"[TheQuartermaster] Failed to persist notified contract IDs: {ex.Message}");
+        }
     }
 
     public void Stop()
@@ -119,10 +197,24 @@ public class CommunityContractService(
 
             await contractInjectionService.InjectActiveContractsAsync(activeEntries, definitions);
             _cachedVersion = version;
+            PersistVersion(version);
 
             if (activeEntries.Count > 0)
             {
-                NotifyPlayersOfNewContracts(activeEntries, definitions);
+                var newEntries = activeEntries.Where(e => !string.IsNullOrWhiteSpace(e.Id) && !_notifiedEntryIds.Contains(e.Id)).ToList();
+                if (newEntries.Count > 0)
+                {
+                    NotifyPlayersOfNewContracts(newEntries, definitions);
+                    foreach (var entry in newEntries)
+                    {
+                        _notifiedEntryIds.Add(entry.Id!);
+                    }
+                    PersistNotifiedEntryIds();
+                }
+                else
+                {
+                    logger.DebugInfo("[TheQuartermaster] No new contract entries to notify about; all already notified.");
+                }
             }
 
             logger.Info($"[TheQuartermaster] Community contract tick complete. {activeEntries.Count} active schedule entr(y/ies).");

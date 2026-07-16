@@ -115,6 +115,7 @@ scp-vm.txt
 contract_sync_local.py
 .marketplace_version
 marketplace.json
+.workshop_sync_hash
 
 # Build artifacts / logs
 *.binlog
