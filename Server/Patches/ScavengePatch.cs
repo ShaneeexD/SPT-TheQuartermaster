@@ -145,6 +145,10 @@ public class ScavengePatch : AbstractPatch
                     {
                         return false;
                     }
+                    if (QuartermasterConstants.Marketplace.StackableParentIds.Contains(template?.Parent.ToString() ?? string.Empty))
+                    {
+                        return false;
+                    }
                 }
 
                 return true;
@@ -179,6 +183,8 @@ public class ScavengePatch : AbstractPatch
                 return;
             }
 
+            var ownerName = pmcData.Info?.Nickname ?? "Unknown PMC";
+
             // Strip FIR (SpawnedInSession) from all items in the tree
             foreach (var item in itemTree)
             {
@@ -187,6 +193,10 @@ public class ScavengePatch : AbstractPatch
                     item.Upd.SpawnedInSession = false;
                 }
             }
+
+            // Tag the root item so the client can render "Scavenged from:" UI
+            selectedItem.Upd ??= new Upd();
+            selectedItem.Upd.Tag = new UpdTag { Color = 0, Name = $"Scavenged from: {ownerName}" };
 
             // Serialize
             var itemTreeJson = _itemCloneService?.SerializeItemTree(itemTree) ?? "[]";
@@ -197,8 +207,6 @@ public class ScavengePatch : AbstractPatch
             {
                 rootName = tpl.Name;
             }
-
-            var ownerName = pmcData.Info?.Nickname ?? "Unknown PMC";
 
             var now = DateTime.UtcNow;
             var delayMinutes = config.ScavengingDelayMinutes > 0 ? config.ScavengingDelayMinutes : 30;
@@ -216,7 +224,9 @@ public class ScavengePatch : AbstractPatch
             };
 
             _scavengedItemService?.SaveScavengedItemAsync(scavengedItem).GetAwaiter().GetResult();
+#if DEBUG
             _logger?.DebugInfo($"[TheQuartermaster] Scavenged item from {ownerName}: {rootName ?? selectedItem.Template} (available in {delayMinutes}m)");
+#endif
         }
         catch (Exception ex)
         {

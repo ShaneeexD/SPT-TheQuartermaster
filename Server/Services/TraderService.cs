@@ -498,6 +498,11 @@ public class TraderService(
         root.Upd.BuyRestrictionMax = totalQuantity;
         root.Upd.BuyRestrictionCurrent = 0;
 
+        if (representative.Listing?.Metadata?.GetValueOrDefault("source") == QuartermasterConstants.Scavenged.ListingMetadataSource && root.Upd.Tag is null)
+        {
+            root.Upd.Tag = new UpdTag { Color = 0, Name = $"Scavenged from: {representative.Listing.SellerName}" };
+        }
+
         assort.Items.AddRange(clonedTree);
         var sellPrice = Math.Max(1, (int)Math.Round(GetItemTreeHandbookPrice(clonedTree) * markup));
         assort.BarterScheme[assortItemId] =
@@ -533,6 +538,11 @@ public class TraderService(
         root.Upd.StackObjectsCount = entry.Quantity;
         root.Upd.BuyRestrictionMax = entry.Quantity;
         root.Upd.BuyRestrictionCurrent = 0;
+
+        if (entry.Listing?.Metadata?.GetValueOrDefault("source") == QuartermasterConstants.Scavenged.ListingMetadataSource && root.Upd.Tag is null)
+        {
+            root.Upd.Tag = new UpdTag { Color = 0, Name = $"Scavenged from: {entry.Listing.SellerName}" };
+        }
 
         assort.Items.AddRange(clonedTree);
         var sellPrice = Math.Max(1, (int)Math.Round(GetItemTreeHandbookPrice(clonedTree) * markup));

@@ -4,7 +4,7 @@
     <RootNamespace>TheQuartermaster.Client</RootNamespace>
     <LangVersion>latest</LangVersion>
     <OutputType>Library</OutputType>
-    <Version>1.0.7</Version>
+    <Version>1.1.0</Version>
     <OutputPath>bin\$(Configuration)\</OutputPath>
     <AssemblyName>TheQuartermaster.Client</AssemblyName>
   </PropertyGroup>
@@ -50,6 +50,10 @@
     </Reference>
     <Reference Include="Sirenix.Serialization">
       <HintPath>$(SPTPath)\EscapeFromTarkov_Data\Managed\Sirenix.Serialization.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="ItemComponent.Types">
+      <HintPath>$(SPTPath)\EscapeFromTarkov_Data\Managed\ItemComponent.Types.dll</HintPath>
       <Private>false</Private>
     </Reference>
     

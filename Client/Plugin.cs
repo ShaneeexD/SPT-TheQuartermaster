@@ -25,6 +25,8 @@ namespace TheQuartermaster.Client
             try
             {
                 new QuestExpiryCountdownPatch().Enable();
+                new TagComponentInjectionPatch().Enable();
+                new ScavengedTagPatch().Enable();
 
                 if (DebugLogging)
                     Log.LogInfo("The Quartermaster Client loaded successfully!");

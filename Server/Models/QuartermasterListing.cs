@@ -26,6 +26,10 @@ public class QuartermasterListing
     [JsonPropertyName("seller_uid")]
     public string? SellerUid { get; set; }
 
+    [FirestoreProperty("seller_name")]
+    [JsonPropertyName("seller_name")]
+    public string? SellerName { get; set; }
+
     [FirestoreProperty("root_tpl")]
     [JsonPropertyName("root_tpl")]
     public string? RootTpl { get; set; }
