@@ -15,6 +15,9 @@ public class RtdbListing
     [JsonPropertyName("seller_uid")]
     public string? SellerUid { get; set; }
 
+    [JsonPropertyName("seller_name")]
+    public string? SellerName { get; set; }
+
     [JsonPropertyName("buyer_hash")]
     public string? BuyerHash { get; set; }
 
