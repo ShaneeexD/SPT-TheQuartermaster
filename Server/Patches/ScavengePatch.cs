@@ -194,9 +194,9 @@ public class ScavengePatch : AbstractPatch
                 }
             }
 
-            // Tag the root item so the client can render "Scavenged from:" UI
+            // Tag the root item so the client can render the scavenged tag UI
             selectedItem.Upd ??= new Upd();
-            selectedItem.Upd.Tag = new UpdTag { Color = 0, Name = $"Scavenged from: {ownerName}" };
+            selectedItem.Upd.Tag = new UpdTag { Color = 0, Name = "~| " + ownerName };
 
             // Serialize
             var itemTreeJson = _itemCloneService?.SerializeItemTree(itemTree) ?? "[]";

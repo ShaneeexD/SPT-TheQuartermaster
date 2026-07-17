@@ -500,7 +500,7 @@ public class TraderService(
 
         if (representative.Listing?.Metadata?.GetValueOrDefault("source") == QuartermasterConstants.Scavenged.ListingMetadataSource && root.Upd.Tag is null)
         {
-            root.Upd.Tag = new UpdTag { Color = 0, Name = $"Scavenged from: {representative.Listing.SellerName}" };
+            root.Upd.Tag = new UpdTag { Color = 0, Name = "~| " + representative.Listing.SellerName };
         }
 
         assort.Items.AddRange(clonedTree);
@@ -541,7 +541,7 @@ public class TraderService(
 
         if (entry.Listing?.Metadata?.GetValueOrDefault("source") == QuartermasterConstants.Scavenged.ListingMetadataSource && root.Upd.Tag is null)
         {
-            root.Upd.Tag = new UpdTag { Color = 0, Name = $"Scavenged from: {entry.Listing.SellerName}" };
+            root.Upd.Tag = new UpdTag { Color = 0, Name = "~| " + entry.Listing.SellerName };
         }
 
         assort.Items.AddRange(clonedTree);
