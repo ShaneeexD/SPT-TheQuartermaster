@@ -81,6 +81,16 @@ public class MarketplaceService(
         return realtimeDatabaseService.GetActiveListingCountAsync();
     }
 
+    public Task<int> GetActiveListingCountExcludingScavengedAsync()
+    {
+        if (!IsEnabled)
+        {
+            return Task.FromResult(0);
+        }
+
+        return realtimeDatabaseService.GetActiveListingCountExcludingScavengedAsync();
+    }
+
     public Task<QuartermasterListing?> GetListingAsync(string listingId)
     {
         if (!IsEnabled)

@@ -57,4 +57,7 @@ public record QuartermasterConfig
     // Falls back to direct RTDB if the URL is unreachable.
     [JsonPropertyName("marketplaceFileUrl")]
     public string MarketplaceFileUrl { get; set; } = "http://144.21.60.21/contracts/marketplace.json";
+
+    [JsonPropertyName("scavengingEnabled")]
+    public bool ScavengingEnabled { get; set; } = true;
 }

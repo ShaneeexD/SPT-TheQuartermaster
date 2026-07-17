@@ -9,6 +9,7 @@ using Google.Cloud.Firestore;
 using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.Models.Utils;
 using TheQuartermaster.Server.Models;
+using TheQuartermaster.Server;
 
 namespace TheQuartermaster.Server.Services;
 
@@ -146,6 +147,27 @@ public class RealtimeDatabaseService(
         catch (Exception ex)
         {
             logger.Error($"[TheQuartermaster] Failed to upload listing to RTDB: {ex.Message}", ex);
+            return null;
+        }
+    }
+
+    public async Task<ScavengedItem?> SaveScavengedItemAsync(ScavengedItem item)
+    {
+        if (!IsEnabled)
+        {
+            return null;
+        }
+
+        try
+        {
+            item.Id ??= GenerateListingId();
+            await PutJsonAsync($"scavengedItems/{item.Id}", item);
+            logger.DebugDebug($"[TheQuartermaster] Saved scavenged item {item.Id} to RTDB.");
+            return item;
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Failed to save scavenged item to RTDB: {ex.Message}", ex);
             return null;
         }
     }
@@ -573,6 +595,56 @@ public class RealtimeDatabaseService(
         catch (Exception ex)
         {
             logger.Error($"[TheQuartermaster] Failed to count active listings from RTDB: {ex.Message}", ex);
+            return 0;
+        }
+    }
+
+    public async Task<int> GetActiveListingCountExcludingScavengedAsync()
+    {
+        if (!IsEnabled)
+        {
+            return 0;
+        }
+
+        try
+        {
+            var states = await GetDictionaryAsync<RtdbListingState>("listingStates");
+            var listings = await GetDictionaryAsync<RtdbListing>("listings/available");
+            if (states is null || states.Count == 0)
+            {
+                return 0;
+            }
+
+            var now = DateTime.UtcNow;
+            var count = 0;
+            foreach (var (id, state) in states)
+            {
+                if (!string.Equals(state.Status, ListingStatus.Active, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (state.ExpiresAt > 0 && DateTimeOffset.FromUnixTimeSeconds(state.ExpiresAt).UtcDateTime <= now)
+                {
+                    continue;
+                }
+
+                if (listings?.TryGetValue(id, out var listing) == true)
+                {
+                    if (listing.Metadata?.TryGetValue("source", out var source) == true
+                        && string.Equals(source, QuartermasterConstants.Scavenged.ListingMetadataSource, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+                    count++;
+                }
+            }
+
+            return count;
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Failed to count active listings (excl. scavenged) from RTDB: {ex.Message}", ex);
             return 0;
         }
     }

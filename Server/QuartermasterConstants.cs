@@ -56,8 +56,8 @@ public static class QuartermasterConstants
 
     public static class Versions
     {
-        public static readonly Version Current = new Version("1.0.7");
-        public const string CurrentString = "1.0.7";
+        public static readonly Version Current = new Version("1.1.0");
+        public const string CurrentString = "1.1.0";
     }
 
     public static class FirestoreCollections
@@ -77,5 +77,24 @@ public static class QuartermasterConstants
         public const string ContractVersion = "contract_version";
         public const string ModVersion = "mod_version";
         public const string ListingConfig = "listing_config";
+    }
+
+    public static class Scavenged
+    {
+        // Equipment slots eligible for weighted selection (excludes Pockets, SecuredContainer, ArmBand)
+        public static readonly HashSet<string> EquipmentSlots = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "Earpiece", "Headwear", "FaceCover", "ArmorVest", "Eyewear",
+            "TacticalVest", "Backpack", "FirstPrimaryWeapon", "SecondPrimaryWeapon",
+            "Holster", "Scabbard"
+        };
+
+        // Container slots whose direct contents can be individually scavenged instead of the whole container
+        public static readonly HashSet<string> ContainerSlots = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "Backpack", "TacticalVest", "Pockets"
+        };
+
+        public const string ListingMetadataSource = "scavenged";
     }
 }

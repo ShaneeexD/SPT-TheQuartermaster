@@ -6,7 +6,7 @@ using TheQuartermaster.Client.Patches;
 
 namespace TheQuartermaster.Client
 {
-    [BepInPlugin("com.shaneeexd.thequartermaster", "The Quartermaster Client", "1.0.7")]
+    [BepInPlugin("com.shaneeexd.thequartermaster", "The Quartermaster Client", "1.1.0")]
     public class Plugin : BaseUnityPlugin
     {
         internal static ManualLogSource Log;

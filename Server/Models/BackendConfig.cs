@@ -88,4 +88,29 @@ public class BackendConfig
     [FirestoreProperty("max_active_listings")]
     [JsonPropertyName("max_active_listings")]
     public int MaxActiveListings { get; set; } = 200;
+
+    // Scavenged items
+    [FirestoreProperty("scavenging_enabled")]
+    [JsonPropertyName("scavenging_enabled")]
+    public bool ScavengingEnabled { get; set; } = true;
+
+    [FirestoreProperty("scavenging_chance")]
+    [JsonPropertyName("scavenging_chance")]
+    public double ScavengingChance { get; set; } = 0.10;
+
+    [FirestoreProperty("scavenging_equipment_weight")]
+    [JsonPropertyName("scavenging_equipment_weight")]
+    public int ScavengingEquipmentWeight { get; set; } = 3;
+
+    [FirestoreProperty("scavenging_other_weight")]
+    [JsonPropertyName("scavenging_other_weight")]
+    public int ScavengingOtherWeight { get; set; } = 1;
+
+    [FirestoreProperty("max_scavenged_listings")]
+    [JsonPropertyName("max_scavenged_listings")]
+    public int MaxScavengedListings { get; set; } = 20;
+
+    [FirestoreProperty("scavenging_delay_minutes")]
+    [JsonPropertyName("scavenging_delay_minutes")]
+    public int ScavengingDelayMinutes { get; set; } = 30;
 }

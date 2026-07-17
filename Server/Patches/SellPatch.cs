@@ -96,7 +96,7 @@ public class SellPatch : AbstractPatch
         {
             if (_marketplaceService?.IsEnabled == true && _backendConfigService is not null)
             {
-                var activeCount = _marketplaceService.GetActiveListingCountAsync().GetAwaiter().GetResult();
+                var activeCount = _marketplaceService.GetActiveListingCountExcludingScavengedAsync().GetAwaiter().GetResult();
                 var cap = _backendConfigService.Config.MaxActiveListings;
                 if (activeCount >= cap)
                 {
