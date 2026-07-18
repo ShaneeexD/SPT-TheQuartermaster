@@ -8,8 +8,11 @@ using System.Text.Json.Serialization;
 using Google.Cloud.Firestore;
 using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.Models.Utils;
+using SPTarkov.Server.Core.Models.Common;
 using TheQuartermaster.Server.Models;
+using TheQuartermaster.Server.Models.Rewards;
 using TheQuartermaster.Server;
+using System.Globalization;
 
 namespace TheQuartermaster.Server.Services;
 
@@ -308,6 +311,44 @@ public class RealtimeDatabaseService(
         {
             logger.Error($"[TheQuartermaster] Failed to ensure listing limits in RTDB: {ex.Message}", ex);
         }
+    }
+
+    public async Task IncrementCommunitySpendingAsync(MongoId sessionId, double totalPrice)
+    {
+        if (!IsEnabled)
+        {
+            return;
+        }
+
+        var amount = (long) totalPrice;
+        if (amount <= 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var currentWeek = await GetJsonAsync<CurrentWeekStats>("community/currentWeek") ?? new CurrentWeekStats { Week = GetIsoWeek(DateTime.UtcNow) };
+            currentWeek.TotalSpent += amount;
+            await PutJsonAsync("community/currentWeek", currentWeek);
+
+            var lifetime = await GetJsonAsync<LifetimeStats>("community/lifetime") ?? new LifetimeStats();
+            lifetime.TotalSpent += amount;
+            await PutJsonAsync("community/lifetime", lifetime);
+
+            logger.DebugInfo($"[TheQuartermaster] Incremented community spending by {amount} for session {sessionId}.");
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Failed to increment community spending: {ex.Message}", ex);
+        }
+    }
+
+    private static string GetIsoWeek(DateTime date)
+    {
+        var year = ISOWeek.GetYear(date);
+        var week = ISOWeek.GetWeekOfYear(date);
+        return $"{year}-W{week:D2}";
     }
 
     public async Task BumpCatalogueVersionAsync()

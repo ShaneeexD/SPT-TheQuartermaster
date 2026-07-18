@@ -28,7 +28,8 @@ public class PurchaseService(
     InventoryHelper inventoryHelper,
     ProfileHelper profileHelper,
     TimeUtil timeUtil,
-    HttpResponseUtil httpResponseUtil
+    HttpResponseUtil httpResponseUtil,
+    RealtimeDatabaseService realtimeDatabaseService
 )
 {
     public async Task<bool> PurchaseItem(
@@ -180,6 +181,10 @@ public class PurchaseService(
                 return false;
             }
 
+            var salesSumBefore = pmcData.TradersInfo?.TryGetValue(QuartermasterConstants.TraderId, out var traderInfoBefore) == true
+                ? traderInfoBefore.SalesSum.GetValueOrDefault()
+                : 0;
+
             // Pay for the requested quantity (client has already computed the total price)
             paymentService.PayMoney(pmcData, buyRequestData, sessionID, output);
             if (output.Warnings?.Count > 0)
@@ -191,6 +196,17 @@ public class PurchaseService(
 
                 return false;
             }
+
+            var salesSumAfter = pmcData.TradersInfo?.TryGetValue(QuartermasterConstants.TraderId, out var traderInfoAfter) == true
+                ? traderInfoAfter.SalesSum.GetValueOrDefault()
+                : 0;
+            var totalPrice = salesSumAfter - salesSumBefore;
+            if (totalPrice <= 1)
+            {
+                totalPrice = representativeListing.MarketPrice * count;
+            }
+
+            await realtimeDatabaseService.IncrementCommunitySpendingAsync(sessionID, totalPrice);
 
             // Build the item(s) to deliver
             var deliveredTree = isStackable

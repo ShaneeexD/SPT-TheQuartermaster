@@ -6,6 +6,7 @@ using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.Models.Utils;
 using TheQuartermaster.Server.Models;
 using TheQuartermaster.Server.Models.Contracts;
+using TheQuartermaster.Server.Models.Rewards;
 
 namespace TheQuartermaster.Server.Services.Contracts;
 
@@ -40,6 +41,12 @@ internal class ContractDataBundle
 
     [JsonPropertyName("item_overrides")]
     public List<ItemPriceOverride> ItemOverrides { get; set; } = [];
+
+    [JsonPropertyName("weeklyReward")]
+    public WeeklyReward WeeklyReward { get; set; } = new();
+
+    [JsonPropertyName("communityStats")]
+    public CommunityStats CommunityStats { get; set; } = new();
 }
 
 public class ModVersionData
@@ -168,7 +175,7 @@ public class ContractFileService(
         return bundle?.ItemOverrides;
     }
 
-    private async Task<ContractDataBundle?> TryGetBundleAsync()
+    internal async Task<ContractDataBundle?> TryGetBundleAsync()
     {
         if (!IsEnabled || string.IsNullOrWhiteSpace(FileUrl))
         {

@@ -9,6 +9,7 @@ using SPTarkov.Reflection.Patching;
 using TheQuartermaster.Server.Patches;
 using TheQuartermaster.Server.Services;
 using TheQuartermaster.Server.Services.Contracts;
+using TheQuartermaster.Server.Services.Rewards;
 using Version = SemanticVersioning.Version;
 using Range = SemanticVersioning.Range;
 
@@ -35,6 +36,7 @@ public class QuartermasterPlugin(
     ISptLogger<SellPatch> sellPatchLogger,
     ISptLogger<BuyPatch> buyPatchLogger,
     ISptLogger<ScavengePatch> scavengePatchLogger,
+    ISptLogger<RewardProfilePatch> rewardProfilePatchLogger,
     ModHelper modHelper,
     ConfigService configService,
     VanillaAllowlistService vanillaAllowlistService,
@@ -57,6 +59,8 @@ public class QuartermasterPlugin(
     BuyPatch buyPatch,
     TraderRefreshPatch traderRefreshPatch,
     ScavengePatch scavengePatch,
+    RewardProfilePatch rewardProfilePatch,
+    CommunityRewardService communityRewardService,
     BackendConfigService backendConfigService,
     ListingConfigService listingConfigService,
     CommunityContractService communityContractService,
@@ -133,11 +137,13 @@ public class QuartermasterPlugin(
                 databaseService,
                 randomUtil
             );
+            RewardProfilePatch.SetDependencies(communityRewardService, rewardProfilePatchLogger);
 
             sellPatch.Enable();
             buyPatch.Enable();
             traderRefreshPatch.Enable();
             scavengePatch.Enable();
+            rewardProfilePatch.Enable();
 
             logger.DebugInfo("[TheQuartermaster] Loaded successfully.");
         }
