@@ -66,11 +66,11 @@ public class ScavengedTagPatch : ModulePatch
             // Add skull icon to the left of the text
             AddSkullIcon(tagColor.gameObject);
 
-            // Add leading spaces to push the visible | separator and name to the right of the skull icon
+            // Strip the | separator and add leading spaces to push the name to the right of the skull icon
             var tagName = TagNameField?.GetValue(__instance) as TextMeshProUGUI;
             if (tagName != null)
             {
-                tagName.text = "   " + tagComponent.Name;
+                tagName.text = "   " + tagComponent.Name.Substring(2);
             }
 
             if (Plugin.DebugLogging)
