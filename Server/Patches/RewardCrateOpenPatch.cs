@@ -78,22 +78,16 @@ public class RewardCrateOpenPatch : AbstractPatch
 
         try
         {
+            var allItems = pmcData.Inventory?.Items ?? new List<Item>();
             var rewards = new List<List<Item>>();
+
             foreach (var child in childItems)
             {
-                var clone = new Item
-                {
-                    Id = new MongoId(),
-                    Template = child.Template,
-                    SlotId = "hideout",
-                    ParentId = null,
-                    Upd = child.Upd
-                };
-
-                rewards.Add([clone]);
+                var cloneTree = CloneItemTree(child, allItems);
+                rewards.Add(cloneTree);
             }
 
-            var foundInRaid = openedItem.Upd?.SpawnedInSession ?? false;
+            var foundInRaid = childItems.Any(c => c.Upd?.SpawnedInSession ?? false);
             var addItemsRequest = new AddItemsDirectRequest
             {
                 ItemsWithModsToAdd = rewards,
@@ -120,6 +114,36 @@ public class RewardCrateOpenPatch : AbstractPatch
         {
             _logger?.Error($"[TheQuartermaster] RewardCrateOpenPatch error: {ex.Message}", ex);
             return true;
+        }
+    }
+
+    private static List<Item> CloneItemTree(Item root, List<Item> allItems)
+    {
+        var idMap = new Dictionary<string, MongoId>();
+        var result = new List<Item>();
+        CloneItemTreeRecursive(root, allItems, null, "hideout", result, idMap);
+        return result;
+    }
+
+    private static void CloneItemTreeRecursive(Item item, List<Item> allItems, MongoId? newParentId, string slotId, List<Item> result, Dictionary<string, MongoId> idMap)
+    {
+        var newId = new MongoId();
+        idMap[item.Id.ToString()] = newId;
+
+        result.Add(new Item
+        {
+            Id = newId,
+            Template = item.Template,
+            ParentId = newParentId?.ToString(),
+            SlotId = slotId,
+            Location = null,
+            Upd = item.Upd
+        });
+
+        var children = allItems.Where(i => i.ParentId == item.Id.ToString()).ToList();
+        foreach (var child in children)
+        {
+            CloneItemTreeRecursive(child, allItems, newId, child.SlotId ?? "main", result, idMap);
         }
     }
 }

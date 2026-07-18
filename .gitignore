@@ -117,7 +117,7 @@ contract_sync_local.py
 marketplace.json
 .workshop_sync_hash
 4.1 mappings.txt
-
+/ref
 # Build artifacts / logs
 *.binlog
 *.log

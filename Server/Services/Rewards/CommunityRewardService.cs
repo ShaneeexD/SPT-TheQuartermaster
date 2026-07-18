@@ -24,6 +24,14 @@ public class CommunityRewardService(
 {
     private const string LastClaimedWeekKey = "quartermasterLastClaimedWeek";
 
+    private static readonly Dictionary<int, (string Name, string ShortName, string Description)> TierLocaleInfo = new()
+    {
+        [1] = ("Quartermaster Supply Crate - Tier 1", "QM Crate T1", "A modest supply crate from the Quartermaster. Community contributions were low this week, but there's still something inside."),
+        [2] = ("Quartermaster Supply Crate - Tier 2", "QM Crate T2", "A standard supply crate from the Quartermaster. The community did okay this week. Open to claim your share."),
+        [3] = ("Quartermaster Supply Crate - Tier 3", "QM Crate T3", "A well-stocked supply crate from the Quartermaster. Solid community contributions this week earned quality goods."),
+        [4] = ("Quartermaster Supply Crate - Tier 4", "QM Crate T4", "A premium supply crate from the Quartermaster. Outstanding community contributions this week earned top-shelf gear.")
+    };
+
     private const string Tier4TemplateId = "66789abcde1234567890abce";
 
     private static readonly Dictionary<int, string> TierTemplates = new()
@@ -62,6 +70,8 @@ public class CommunityRewardService(
                 return;
             }
 
+            OverrideCrateLocales(weeklyReward.Tier, templateId);
+
             var crateId = new MongoId();
             var items = new List<Item>
             {
@@ -92,19 +102,28 @@ public class CommunityRewardService(
                     continue;
                 }
 
-                items.Add(new Item
+                // Create individual items (no stacking for non-ammo items)
+                for (var i = 0; i < content.Count; i++)
                 {
-                    Id = new MongoId(),
-                    Template = content.Tpl,
-                    ParentId = crateId,
-                    SlotId = "main",
-                    Location = null,
-                    Upd = new Upd
+                    var contentId = new MongoId();
+                    items.Add(new Item
                     {
-                        StackObjectsCount = content.Count,
-                        SpawnedInSession = content.FoundInRaid
+                        Id = contentId,
+                        Template = content.Tpl,
+                        ParentId = crateId,
+                        SlotId = "main",
+                        Location = null,
+                        Upd = new Upd
+                        {
+                            SpawnedInSession = content.FoundInRaid
+                        }
+                    });
+
+                    if (content.Children is { Count: > 0 })
+                    {
+                        AddChildren(content.Children, contentId, content.FoundInRaid, items);
                     }
-                });
+                }
             }
 
             // Tier 4 uses the Tier 3 crate with a yellow highlight marker.
@@ -115,9 +134,7 @@ public class CommunityRewardService(
                 items[0].Upd.Tag.Name = $"{weeklyReward.RewardId}|yellow";
             }
 
-            var message = string.IsNullOrWhiteSpace(weeklyReward.Message)
-                ? GetTierMessage(weeklyReward.Tier)
-                : weeklyReward.Message;
+            var message = GetTierMessage(weeklyReward.Tier);
 
             mailSendService.SendDirectNpcMessageToPlayer(
                 sessionId,
@@ -191,6 +208,37 @@ public class CommunityRewardService(
         return Tier4TemplateId;
     }
 
+    private static void AddChildren(List<RewardPackageContent> children, MongoId parentId, bool foundInRaid, List<Item> items)
+    {
+        foreach (var child in children)
+        {
+            if (string.IsNullOrWhiteSpace(child.Tpl))
+            {
+                continue;
+            }
+
+            var childId = new MongoId();
+            items.Add(new Item
+            {
+                Id = childId,
+                Template = child.Tpl,
+                ParentId = parentId.ToString(),
+                SlotId = child.SlotId ?? "main",
+                Location = null,
+                Upd = new Upd
+                {
+                    StackObjectsCount = child.Count > 0 ? child.Count : 1,
+                    SpawnedInSession = foundInRaid
+                }
+            });
+
+            if (child.Children is { Count: > 0 })
+            {
+                AddChildren(child.Children, childId, foundInRaid, items);
+            }
+        }
+    }
+
     private static long GetLastClaimedWeek(SptProfile profile)
     {
         return profile.SptData?.Migrations?.TryGetValue(LastClaimedWeekKey, out var value) == true ? value : 0;
@@ -218,5 +266,26 @@ public class CommunityRewardService(
             4 => "Outstanding work, operator. The community absolutely delivered this week - best we've seen in a long time. I've pulled out all the stops on this one. Premium gear, top shelf, the works. This is what happens when everyone does their part. Enjoy it - you've more than earned it.",
             _ => "Weekly community supply shipment. Open the crate to claim your share."
         };
+    }
+
+    private void OverrideCrateLocales(int tier, string templateId)
+    {
+        if (!TierLocaleInfo.TryGetValue(tier, out var info))
+        {
+            return;
+        }
+
+        var locales = databaseService.GetTables().Locales.Global;
+        foreach (var (_, localeData) in locales)
+        {
+            localeData.AddTransformer(ld =>
+            {
+                ld ??= new Dictionary<string, string>();
+                ld[templateId + " Name"] = info.Name;
+                ld[templateId + " ShortName"] = info.ShortName;
+                ld[templateId + " Description"] = info.Description;
+                return ld;
+            });
+        }
     }
 }

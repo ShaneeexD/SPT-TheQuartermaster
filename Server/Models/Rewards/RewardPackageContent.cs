@@ -12,4 +12,10 @@ public class RewardPackageContent
 
     [JsonPropertyName("foundInRaid")]
     public bool FoundInRaid { get; set; } = false;
+
+    [JsonPropertyName("slotId")]
+    public string? SlotId { get; set; }
+
+    [JsonPropertyName("children")]
+    public List<RewardPackageContent>? Children { get; set; }
 }
