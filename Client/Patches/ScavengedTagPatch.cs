@@ -15,6 +15,7 @@ namespace TheQuartermaster.Client.Patches;
 public class ScavengedTagPatch : ModulePatch
 {
     private static readonly FieldInfo TagColorField = AccessTools.Field(typeof(GridItemView), "_tagColor");
+    private static readonly FieldInfo TagNameField = AccessTools.Field(typeof(GridItemView), "TagName");
     private static Sprite _skullSprite;
 
     protected override MethodBase GetTargetMethod()
@@ -44,8 +45,8 @@ public class ScavengedTagPatch : ModulePatch
             if (Plugin.DebugLogging)
                 Plugin.Log.LogDebug($"[TheQuartermaster] Tag name='{tagComponent.Name}' len={tagComponent.Name.Length} firstChar=U+{((int)tagComponent.Name[0]):X4} color={tagComponent.Color}");
 
-            // Only handle scavenged tags (marked with ~| prefix)
-            if (!tagComponent.Name.StartsWith("~|"))
+            // Only handle scavenged tags (marked with | prefix)
+            if (!tagComponent.Name.StartsWith("| "))
                 return;
 
             var tagColor = TagColorField.GetValue(__instance) as Image;
@@ -65,12 +66,11 @@ public class ScavengedTagPatch : ModulePatch
             // Add skull icon to the left of the text
             AddSkullIcon(tagColor.gameObject);
 
-            // Strip the marker and add leading spaces for icon spacing
-            var tagText = tagColor.GetComponentInChildren<TextMeshProUGUI>();
-            if (tagText != null)
+            // Add leading spaces to push the visible | separator and name to the right of the skull icon
+            var tagName = TagNameField?.GetValue(__instance) as TextMeshProUGUI;
+            if (tagName != null)
             {
-                var displayName = tagComponent.Name.Substring(3);
-                tagText.text = "    " + displayName;
+                tagName.text = "   " + tagComponent.Name;
             }
 
             if (Plugin.DebugLogging)

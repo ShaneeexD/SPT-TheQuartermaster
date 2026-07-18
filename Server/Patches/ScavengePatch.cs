@@ -111,6 +111,12 @@ public class ScavengePatch : AbstractPatch
                     }
                 }
 
+                // Exclude the virtual Pockets grid container (not a real item)
+                if (item.Template.ToString() == "557596e64bdc2dc2118b4571")
+                {
+                    return false;
+                }
+
                 return true;
             }).ToList();
 
@@ -196,7 +202,7 @@ public class ScavengePatch : AbstractPatch
 
             // Tag the root item so the client can render the scavenged tag UI
             selectedItem.Upd ??= new Upd();
-            selectedItem.Upd.Tag = new UpdTag { Color = 0, Name = "~| " + ownerName };
+            selectedItem.Upd.Tag = new UpdTag { Color = 0, Name = "| " + ownerName };
 
             // Serialize
             var itemTreeJson = _itemCloneService?.SerializeItemTree(itemTree) ?? "[]";
