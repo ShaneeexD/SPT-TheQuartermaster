@@ -116,7 +116,7 @@ public class CommunityRewardService(
             }
 
             var message = string.IsNullOrWhiteSpace(weeklyReward.Message)
-                ? $"Weekly community reward: {weeklyReward.RewardId}"
+                ? GetTierMessage(weeklyReward.Tier)
                 : weeklyReward.Message;
 
             mailSendService.SendDirectNpcMessageToPlayer(
@@ -206,5 +206,17 @@ public class CommunityRewardService(
     private static long EncodeWeek(string week)
     {
         return long.TryParse(week.Replace("-W", "", StringComparison.OrdinalIgnoreCase), out var value) ? value : 0;
+    }
+
+    private static string GetTierMessage(int tier)
+    {
+        return tier switch
+        {
+            1 => "Times have been tough, operator. The community's contributions this week were... modest, to put it kindly. I've scraped together what I could from the back of the warehouse. It's not much, but it's what we've got. Take it, and let's hope next week treats us better.",
+            2 => "Another week in the books. Business wasn't exactly booming, but we survived. Here's your share of the haul - picked over, but there's still some useful bits in there. Keep your head down out there, and maybe next week we'll have reason to celebrate.",
+            3 => "Now this is more like it. The community pulled through this week - solid contributions across the board. I've put together a proper supply crate for you. Quality goods, no scraps here. You've earned this one, operator. Let's keep this momentum going.",
+            4 => "Outstanding work, operator. The community absolutely delivered this week - best we've seen in a long time. I've pulled out all the stops on this one. Premium gear, top shelf, the works. This is what happens when everyone does their part. Enjoy it - you've more than earned it.",
+            _ => "Weekly community supply shipment. Open the crate to claim your share."
+        };
     }
 }

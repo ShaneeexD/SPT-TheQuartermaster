@@ -37,6 +37,7 @@ public class QuartermasterPlugin(
     ISptLogger<BuyPatch> buyPatchLogger,
     ISptLogger<ScavengePatch> scavengePatchLogger,
     ISptLogger<RewardProfilePatch> rewardProfilePatchLogger,
+    ISptLogger<RewardCrateOpenPatch> rewardCrateOpenPatchLogger,
     ModHelper modHelper,
     ConfigService configService,
     VanillaAllowlistService vanillaAllowlistService,
@@ -60,6 +61,7 @@ public class QuartermasterPlugin(
     TraderRefreshPatch traderRefreshPatch,
     ScavengePatch scavengePatch,
     RewardProfilePatch rewardProfilePatch,
+    RewardCrateOpenPatch rewardCrateOpenPatch,
     CommunityRewardService communityRewardService,
     BackendConfigService backendConfigService,
     ListingConfigService listingConfigService,
@@ -138,12 +140,14 @@ public class QuartermasterPlugin(
                 randomUtil
             );
             RewardProfilePatch.SetDependencies(communityRewardService, rewardProfilePatchLogger);
+            RewardCrateOpenPatch.SetDependencies(inventoryHelper, rewardCrateOpenPatchLogger);
 
             sellPatch.Enable();
             buyPatch.Enable();
             traderRefreshPatch.Enable();
             scavengePatch.Enable();
             rewardProfilePatch.Enable();
+            rewardCrateOpenPatch.Enable();
 
             logger.DebugInfo("[TheQuartermaster] Loaded successfully.");
         }
