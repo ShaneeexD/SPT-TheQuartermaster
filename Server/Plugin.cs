@@ -61,7 +61,8 @@ public class QuartermasterPlugin(
     ListingConfigService listingConfigService,
     CommunityContractService communityContractService,
     WorkshopContractSyncService workshopContractSyncService,
-    HttpResponseUtil httpResponseUtil
+    HttpResponseUtil httpResponseUtil,
+    ProfileHelper profileHelper
 ) : IOnLoad
 {
     private static string _modPath = string.Empty;
@@ -117,6 +118,7 @@ public class QuartermasterPlugin(
                 traderService,
                 itemOverrideService,
                 itemHelper,
+                profileHelper,
                 sellPatchLogger,
                 httpResponseUtil
             );

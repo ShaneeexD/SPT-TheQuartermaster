@@ -34,6 +34,7 @@ public class SellPatch : AbstractPatch
     private static TqmServices.TraderService? _traderService;
     private static ItemOverrideService? _itemOverrideService;
     private static ItemHelper? _itemHelper;
+    private static ProfileHelper? _profileHelper;
     private static ISptLogger<SellPatch>? _logger;
     private static HttpResponseUtil? _httpResponseUtil;
 
@@ -49,6 +50,7 @@ public class SellPatch : AbstractPatch
         TqmServices.TraderService traderService,
         ItemOverrideService itemOverrideService,
         ItemHelper itemHelper,
+        ProfileHelper profileHelper,
         ISptLogger<SellPatch> logger,
         HttpResponseUtil httpResponseUtil
     )
@@ -64,6 +66,7 @@ public class SellPatch : AbstractPatch
         _traderService = traderService;
         _itemOverrideService = itemOverrideService;
         _itemHelper = itemHelper;
+        _profileHelper = profileHelper;
         _logger = logger;
         _httpResponseUtil = httpResponseUtil;
     }
@@ -94,6 +97,18 @@ public class SellPatch : AbstractPatch
 
         try
         {
+            // Block SPT Developer edition profiles from selling, except for the Dev2 bypass account
+            var fullProfile = _profileHelper?.GetFullProfile(sessionID);
+            if (fullProfile?.ProfileInfo?.Edition == "SPT Developer" && fullProfile?.ProfileInfo?.Username != "Dev2")
+            {
+                _httpResponseUtil?.AppendErrorToOutput(
+                    output,
+                    "[TheQuartermaster] Developer profiles cannot use the marketplace.",
+                    BackendErrorCodes.UnknownTradingError
+                );
+                return false;
+            }
+
             if (_marketplaceService?.IsEnabled == true && _backendConfigService is not null)
             {
                 var activeCount = _marketplaceService.GetActiveListingCountExcludingScavengedAsync().GetAwaiter().GetResult();

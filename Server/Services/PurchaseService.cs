@@ -49,6 +49,18 @@ public class PurchaseService(
             return false;
         }
 
+        // Block SPT Developer edition profiles from buying, except for the Dev2 bypass account
+        var fullProfile = profileHelper.GetFullProfile(sessionID);
+        if (fullProfile?.ProfileInfo?.Edition == "SPT Developer" && fullProfile?.ProfileInfo?.Username != "Dev2")
+        {
+            httpResponseUtil.AppendErrorToOutput(
+                output,
+                "[TheQuartermaster] Developer profiles cannot use the marketplace.",
+                BackendErrorCodes.UnknownTradingError
+            );
+            return false;
+        }
+
         var itemId = buyRequestData.ItemId;
         var stackInfo = traderService.GetStackInfoForAssortItem(itemId);
         if (stackInfo is null || stackInfo.Allocations.Count == 0)
@@ -184,6 +196,12 @@ public class PurchaseService(
             var deliveredTree = isStackable
                 ? BuildStackableDeliveryTree(itemTree, count)
                 : itemCloneService.CloneAndRemap(itemTree);
+
+            // Remove the scavenged tag marker from the purchased item so it doesn't carry over to the player's stash
+            if (deliveredTree is { Count: > 0 } && deliveredTree[0].Upd is not null)
+            {
+                deliveredTree[0].Upd.Tag = null;
+            }
 
             var addRequest = new AddItemsDirectRequest
             {
