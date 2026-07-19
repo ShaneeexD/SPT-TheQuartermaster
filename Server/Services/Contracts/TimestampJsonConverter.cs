@@ -1,4 +1,5 @@
 using Google.Cloud.Firestore;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -39,12 +40,12 @@ public class TimestampJsonConverter : JsonConverter<Timestamp>
                     {
                         case "_seconds":
                         case "seconds":
-                            seconds = reader.TryGetInt64(out var s) ? s : long.Parse(reader.GetString()!);
+                            seconds = reader.TryGetInt64(out var s) ? s : long.Parse(reader.GetString()!, CultureInfo.InvariantCulture);
                             break;
                         case "_nanoseconds":
                         case "nanos":
                         case "nanoseconds":
-                            nanos = reader.TryGetInt32(out var n) ? n : int.Parse(reader.GetString()!);
+                            nanos = reader.TryGetInt32(out var n) ? n : int.Parse(reader.GetString()!, CultureInfo.InvariantCulture);
                             break;
                     }
                 }
@@ -62,7 +63,7 @@ public class TimestampJsonConverter : JsonConverter<Timestamp>
                 return default;
             }
 
-            if (DateTimeOffset.TryParse(str, out var dto))
+            if (DateTimeOffset.TryParse(str, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dto))
             {
                 return Timestamp.FromDateTimeOffset(dto);
             }

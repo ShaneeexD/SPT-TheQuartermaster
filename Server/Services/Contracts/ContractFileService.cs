@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -383,23 +384,23 @@ public class ContractFileService(
 
         if (rewards.Experience > 0)
         {
-            list.Add(($"+{rewards.Experience:N0} EXP", "exp"));
+            list.Add(($"+{rewards.Experience.ToString("N0", CultureInfo.InvariantCulture)} EXP", "exp"));
         }
 
         if (rewards.Roubles > 0)
         {
-            list.Add(($"+{rewards.Roubles:N0} Roubles", "roubles"));
+            list.Add(($"+{rewards.Roubles.ToString("N0", CultureInfo.InvariantCulture)} Roubles", "roubles"));
         }
 
         if (rewards.Money is { Amount: > 0 } money)
         {
             var icon = money.Currency?.ToLowerInvariant().Replace(" ", string.Empty) ?? "money";
-            list.Add(($"+{money.Amount:N0} {money.Currency}", icon));
+            list.Add(($"+{money.Amount.ToString("N0", CultureInfo.InvariantCulture)} {money.Currency}", icon));
         }
 
         if (rewards.TraderStanding > 0)
         {
-            list.Add(($"+{rewards.TraderStanding:F2} trader standing", "standing"));
+            list.Add(($"+{rewards.TraderStanding.ToString("F2", CultureInfo.InvariantCulture)} trader standing", "standing"));
         }
 
         foreach (var item in rewards.Items)

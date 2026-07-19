@@ -21,7 +21,7 @@ public record QuartermasterMetadata : AbstractModMetadata
     public override string Name { get; init; } = "The Quartermaster";
     public override string Author { get; init; } = "ShaneeexD";
     public override List<string>? Contributors { get; init; } = null;
-    public override Version Version { get; init; } = new Version("1.1.0");
+    public override Version Version { get; init; } = new Version("1.2.0");
     public override Range SptVersion { get; init; } = new Range("~4.0.13");
     public override List<string>? Incompatibilities { get; init; } = null;
     public override Dictionary<string, Range>? ModDependencies { get; init; } = null;
