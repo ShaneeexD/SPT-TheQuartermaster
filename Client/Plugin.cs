@@ -3,6 +3,7 @@ using System.IO;
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
+
 using TheQuartermaster.Client.Patches;
 using TheQuartermaster.Client.Services;
 using TheQuartermaster.Client.UI;
@@ -15,6 +16,8 @@ namespace TheQuartermaster.Client
     {
         internal static ManualLogSource Log;
         internal static bool DebugLogging;
+        internal static ConfigEntry<bool> ShowScavengedTags;
+        internal static ConfigEntry<bool> ShowSellerTags;
 
         private void Awake()
         {
@@ -22,6 +25,9 @@ namespace TheQuartermaster.Client
 
             var debugConfig = Config.Bind("General", "DebugLogging", false, "Enable debug logging for the client mod");
             DebugLogging = debugConfig.Value;
+
+            ShowScavengedTags = Config.Bind("Tags", "ShowScavengedTags", true, "Show red skull tags on scavenged marketplace items");
+            ShowSellerTags = Config.Bind("Tags", "ShowSellerTags", false, "Show green seller name tags on sold marketplace items");
 
             if (DebugLogging)
                 Log.LogInfo("The Quartermaster Client loading...");

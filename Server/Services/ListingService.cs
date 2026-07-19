@@ -27,7 +27,7 @@ public class ListingService(
 {
     private readonly Dictionary<string, string> _sellerHashToSessionId = [];
 
-    public QuartermasterListing? CreateListing(List<Item> itemTree, string sellerProfileId, string sellerSessionId)
+    public QuartermasterListing? CreateListing(List<Item> itemTree, string sellerProfileId, string sellerSessionId, string? sellerName = null)
     {
         if (!itemCompatibilityService.IsListingValidForUpload(itemTree))
         {
@@ -40,6 +40,12 @@ public class ListingService(
         {
             item.Upd ??= new Upd();
             item.Upd.SpawnedInSession = false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(sellerName))
+        {
+            root.Upd ??= new Upd();
+            root.Upd.Tag = new UpdTag { Color = 0, Name = "> " + sellerName.Trim() };
         }
 
         var rootTemplate = itemHelper.GetItem(root.Template).Value;
@@ -70,6 +76,7 @@ public class ListingService(
         var listing = new QuartermasterListing
         {
             SellerHash = HashProfileId(sellerProfileId),
+            SellerName = string.IsNullOrWhiteSpace(sellerName) ? null : sellerName.Trim(),
             RootTpl = root.Template.ToString(),
             RootName = name,
             ShortName = shortName,

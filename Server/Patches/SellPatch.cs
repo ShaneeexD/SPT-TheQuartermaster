@@ -99,6 +99,7 @@ public class SellPatch : AbstractPatch
         {
             // Block SPT Developer edition profiles from selling, except for the Dev2 bypass account
             var fullProfile = _profileHelper?.GetFullProfile(sessionID);
+            var sellerName = profileWithItemsToSell.Info?.Nickname ?? "Unknown PMC";
             if (fullProfile?.ProfileInfo?.Edition == "SPT Developer" && fullProfile?.ProfileInfo?.Username != "Dev2")
             {
                 _httpResponseUtil?.AppendErrorToOutput(
@@ -171,7 +172,8 @@ public class SellPatch : AbstractPatch
                 var listing = _listingService?.CreateListing(
                     deserialized,
                     sessionID.ToString(),
-                    sessionID.ToString()
+                    sessionID.ToString(),
+                    sellerName
                 );
 
                 if (listing is null)

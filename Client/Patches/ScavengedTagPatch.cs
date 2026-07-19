@@ -1,11 +1,15 @@
 using System;
+using System.IO;
+using System.Linq;
 using System.Reflection;
 using Comfort.Common;
+using EFT;
 using EFT.InventoryLogic;
 using EFT.UI;
 using EFT.UI.DragAndDrop;
 using HarmonyLib;
 using SPT.Reflection.Patching;
+using TheQuartermaster.Client.Services;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -45,13 +49,11 @@ public class ScavengedTagPatch : ModulePatch
             if (Plugin.DebugLogging)
                 Plugin.Log.LogDebug($"[TheQuartermaster] Tag name='{tagComponent.Name}' len={tagComponent.Name.Length} firstChar=U+{((int)tagComponent.Name[0]):X4} color={tagComponent.Color}");
 
-            // Only handle scavenged tags (marked with | prefix)
-            if (!tagComponent.Name.StartsWith("| "))
-                return;
-
             var tagColor = TagColorField.GetValue(__instance) as Image;
             if (tagColor == null || !tagColor.gameObject.activeSelf)
                 return;
+
+            var tagName = TagNameField?.GetValue(__instance) as TextMeshProUGUI;
 
             // Reposition to bottom-left and render on top of the item icon
             var rt = tagColor.rectTransform;
@@ -63,23 +65,65 @@ public class ScavengedTagPatch : ModulePatch
             // Move the tag to the end of the sibling list so it renders on top
             tagColor.transform.SetAsLastSibling();
 
-            // Add skull icon to the left of the text
-            AddSkullIcon(tagColor.gameObject);
-
-            // Strip the | separator and add leading spaces to push the name to the right of the skull icon
-            var tagName = TagNameField?.GetValue(__instance) as TextMeshProUGUI;
-            if (tagName != null)
+            // Scavenged tag: red skull
+            if (tagComponent.Name.StartsWith("| "))
             {
-                tagName.text = "   " + tagComponent.Name.Substring(2);
+                if (Plugin.ShowScavengedTags != null && !Plugin.ShowScavengedTags.Value)
+                {
+                    HideTag(tagColor, tagName);
+                    return;
+                }
+
+                tagColor.gameObject.SetActive(true);
+                tagColor.color = new Color32(180, 0, 0, 255);
+                AddSkullIcon(tagColor.gameObject);
+
+                if (tagName != null)
+                {
+                    tagName.gameObject.SetActive(true);
+                    tagName.text = "   " + tagComponent.Name.Substring(2);
+                }
+
+                if (Plugin.DebugLogging)
+                    Plugin.Log.LogDebug($"[TheQuartermaster] Repositioned scavenged tag to bottom-left on {item.TemplateId} ({item.Id})");
+                return;
             }
 
-            if (Plugin.DebugLogging)
-                Plugin.Log.LogDebug($"[TheQuartermaster] Repositioned scavenged tag to bottom-left on {item.TemplateId} ({item.Id})");
+            // Seller tag: green
+            if (tagComponent.Name.StartsWith("> "))
+            {
+                if (Plugin.ShowSellerTags != null && !Plugin.ShowSellerTags.Value)
+                {
+                    HideTag(tagColor, tagName);
+                    return;
+                }
+
+                tagColor.gameObject.SetActive(true);
+                tagColor.color = new Color32(0, 180, 0, 255);
+
+                if (tagName != null)
+                {
+                    tagName.gameObject.SetActive(true);
+                    tagName.alignment = TextAlignmentOptions.Left;
+                    tagName.text = tagComponent.Name.Substring(2).TrimStart();
+                }
+
+                if (Plugin.DebugLogging)
+                    Plugin.Log.LogDebug($"[TheQuartermaster] Rendered seller tag to bottom-left on {item.TemplateId} ({item.Id})");
+                return;
+            }
         }
         catch (Exception ex)
         {
             Plugin.Log.LogError($"[TheQuartermaster] ScavengedTagPatch error: {ex}");
         }
+    }
+
+    private static void HideTag(Image tagColor, TextMeshProUGUI tagName)
+    {
+        tagColor.gameObject.SetActive(false);
+        if (tagName != null)
+            tagName.gameObject.SetActive(false);
     }
 
     private static void AddSkullIcon(GameObject tagBg)
@@ -124,4 +168,5 @@ public class ScavengedTagPatch : ModulePatch
         skullImage.raycastTarget = false;
         skullImage.preserveAspect = true;
     }
+
 }
