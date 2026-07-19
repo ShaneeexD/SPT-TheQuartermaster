@@ -2,7 +2,9 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using EFT.UI;
+using EFT;
 using Newtonsoft.Json.Linq;
 using TheQuartermaster.Client.Services;
 using TMPro;
@@ -32,6 +34,7 @@ namespace TheQuartermaster.Client.UI
         private RectTransform _contentArea;
         private GameObject _communityScreen;
         private Text _statusText;
+        private Text _rightSideText;
         private Transform _submissionListContainer;
         private GameObject _listView;
         private GameObject _detailView;
@@ -653,12 +656,29 @@ namespace TheQuartermaster.Client.UI
             ragman.gameObject.SetActive(true);
             Plugin.Log.LogInfo("[TheQuartermaster] Activated Ragman container.");
 
-            // Hide TacticalClothingView (the player model preview) — we don't need it
+            // Repurpose TacticalClothingView as the right-side quest details panel
             var clothingView = FindChild(ragman, "TacticalClothingView");
             if (clothingView != null)
             {
-                clothingView.gameObject.SetActive(false);
-                Plugin.Log.LogInfo("[TheQuartermaster] Hidden TacticalClothingView.");
+                clothingView.gameObject.SetActive(true);
+                for (int i = 0; i < clothingView.childCount; i++)
+                    clothingView.GetChild(i).gameObject.SetActive(false);
+
+                var detailsGO = new GameObject("CommunityDetails", typeof(RectTransform), typeof(Text));
+                detailsGO.transform.SetParent(clothingView, false);
+                var detailsRT = detailsGO.GetComponent<RectTransform>();
+                detailsRT.anchorMin = new Vector2(0.02f, 0.02f);
+                detailsRT.anchorMax = new Vector2(0.98f, 0.98f);
+                detailsRT.offsetMin = Vector2.zero;
+                detailsRT.offsetMax = Vector2.zero;
+                _rightSideText = detailsGO.GetComponent<Text>();
+                _rightSideText.color = new Color32(220, 220, 220, 255);
+                _rightSideText.fontSize = 18;
+                _rightSideText.alignment = TextAnchor.UpperLeft;
+                _rightSideText.verticalOverflow = VerticalWrapMode.Overflow;
+                _rightSideText.horizontalOverflow = HorizontalWrapMode.Wrap;
+                _rightSideText.text = "Select a community contract to view details.";
+                Plugin.Log.LogInfo("[TheQuartermaster] Prepared right-side details panel.");
             }
 
             var servicesList = FindChild(ragman, "ServicesList");
@@ -700,6 +720,9 @@ namespace TheQuartermaster.Client.UI
                         _statusText.text = "Community Contracts";
                         Plugin.Log.LogInfo("[TheQuartermaster] Repurposed ServicesList Header Title as status text.");
                     }
+
+                    if (_rightSideText != null && _statusText != null)
+                        _rightSideText.font = _statusText.font;
                 }
 
                 // Add Refresh button to the right side of the header (plain simple button that fits)
@@ -794,6 +817,9 @@ namespace TheQuartermaster.Client.UI
         {
             if (_submissionListContainer == null) return;
 
+            if (_rightSideText != null)
+                _rightSideText.text = "Select a community contract to view details.";
+
             // Clear existing rows (keep the template)
             for (int i = _submissionListContainer.childCount - 1; i >= 0; i--)
             {
@@ -861,6 +887,7 @@ namespace TheQuartermaster.Client.UI
             if (btn != null)
             {
                 btn.onClick.RemoveAllListeners();
+                AttachClickSound(rowObj, btn);
                 btn.onClick.AddListener(() => ShowSubmissionDetails(submission));
             }
         }
@@ -876,8 +903,12 @@ namespace TheQuartermaster.Client.UI
             var ratio = submission["approval_ratio"]?.ToObject<float>() ?? 0f;
             var id = submission["id"]?.ToString() ?? string.Empty;
 
-            // Show details in the status text
+            // Update header with selected contract title
             if (_statusText != null)
+                _statusText.text = $"Selected: {title}";
+
+            // Populate the right-side details panel
+            if (_rightSideText != null)
             {
                 var objectives = submission["objectives"] as JArray;
                 var objText = "";
@@ -892,9 +923,9 @@ namespace TheQuartermaster.Client.UI
                 }
 
                 var rewards = submission["rewards"];
-                var rewardText = rewards != null ? $"\n\nRewards:\n{rewards}" : "";
+                var rewardText = FormatRewards(rewards);
 
-                _statusText.text = $"{title}\nby {author}  |  Support: {ratio:F0}%  Up: {upvotes}  Down: {downvotes}\n\n{description}{objText}{rewardText}";
+                _rightSideText.text = $"{title}\nby {author}  |  Support: {ratio:F0}%  Up: {upvotes}  Down: {downvotes}\n\n{description}{objText}{rewardText}";
             }
 
             // Replace list with action buttons — all EFT style for consistency
@@ -915,38 +946,50 @@ namespace TheQuartermaster.Client.UI
                 var upvoteBtn = CreateEftButton(_submissionListContainer, "UpvoteButton", "Upvote", new Vector2(15, -45), new Vector2(0, 1));
                 WireEftButtonClick(upvoteBtn, () =>
                 {
-                    if (_currentSubmission != null)
+                    if (_currentSubmission == null)
+                        return;
+
+                    if (!CommunityApiClient.IsLinked)
                     {
-                        var sid = _currentSubmission["id"]?.ToString() ?? "";
-                        CommunityApiClient.CastVote(sid, true, result =>
-                        {
-                            RunOnMainThread(() =>
-                            {
-                                UpdateVoteFromResult(_currentSubmission, result);
-                                ShowSubmissionDetails(_currentSubmission);
-                            });
-                        });
-                        Plugin.Log.LogInfo($"[TheQuartermaster] Upvoted submission {sid}");
+                        ShowErrorPopup("You must link Discord to vote.");
+                        return;
                     }
+
+                    var sid = _currentSubmission["id"]?.ToString() ?? "";
+                    CommunityApiClient.CastVote(sid, true, result =>
+                    {
+                        RunOnMainThread(() =>
+                        {
+                            UpdateVoteFromResult(_currentSubmission, result);
+                            ShowSubmissionDetails(_currentSubmission);
+                        });
+                    });
+                    Plugin.Log.LogInfo($"[TheQuartermaster] Upvoted submission {sid}");
                 });
 
                 // Downvote button (EFT style, next to upvote)
                 var downvoteBtn = CreateEftButton(_submissionListContainer, "DownvoteButton", "Downvote", new Vector2(145, -45), new Vector2(0, 1));
                 WireEftButtonClick(downvoteBtn, () =>
                 {
-                    if (_currentSubmission != null)
+                    if (_currentSubmission == null)
+                        return;
+
+                    if (!CommunityApiClient.IsLinked)
                     {
-                        var sid = _currentSubmission["id"]?.ToString() ?? "";
-                        CommunityApiClient.CastVote(sid, false, result =>
-                        {
-                            RunOnMainThread(() =>
-                            {
-                                UpdateVoteFromResult(_currentSubmission, result);
-                                ShowSubmissionDetails(_currentSubmission);
-                            });
-                        });
-                        Plugin.Log.LogInfo($"[TheQuartermaster] Downvoted submission {sid}");
+                        ShowErrorPopup("You must link Discord to vote.");
+                        return;
                     }
+
+                    var sid = _currentSubmission["id"]?.ToString() ?? "";
+                    CommunityApiClient.CastVote(sid, false, result =>
+                    {
+                        RunOnMainThread(() =>
+                        {
+                            UpdateVoteFromResult(_currentSubmission, result);
+                            ShowSubmissionDetails(_currentSubmission);
+                        });
+                    });
+                    Plugin.Log.LogInfo($"[TheQuartermaster] Downvoted submission {sid}");
                 });
 
                 // Link Discord / Unlink button (EFT style, below vote buttons)
@@ -1111,7 +1154,36 @@ namespace TheQuartermaster.Client.UI
             cb.fadeDuration = 0.1f;
             btn.colors = cb;
 
+            AttachClickSound(go, btn);
             return go;
+        }
+
+        private void AttachClickSound(GameObject target, Button btn)
+        {
+            if (_eftButtonTemplate == null || btn == null)
+                return;
+
+            var sourceTemplate = _eftButtonTemplate.GetComponentInChildren<AudioSource>(true);
+            if (sourceTemplate == null || sourceTemplate.clip == null)
+                return;
+
+            var source = target.GetComponent<AudioSource>();
+            if (source == null)
+            {
+                source = target.AddComponent<AudioSource>();
+                source.clip = sourceTemplate.clip;
+                source.volume = sourceTemplate.volume;
+                source.pitch = sourceTemplate.pitch;
+                source.playOnAwake = false;
+                source.spatialBlend = 0f;
+                source.outputAudioMixerGroup = sourceTemplate.outputAudioMixerGroup;
+            }
+
+            btn.onClick.AddListener(() =>
+            {
+                if (source != null)
+                    source.Play();
+            });
         }
 
         private static void HideNamedChildren(Transform t, string[] names)
@@ -1123,6 +1195,182 @@ namespace TheQuartermaster.Client.UI
                     child.gameObject.SetActive(false);
                 HideNamedChildren(child, names);
             }
+        }
+
+        private static string FormatRewards(JToken rewards)
+        {
+            if (rewards == null)
+                return string.Empty;
+
+            var lines = new List<string>();
+
+            if (rewards is JObject obj)
+            {
+                int exp = obj["experience"]?.ToObject<int>() ?? 0;
+                if (exp > 0)
+                    lines.Add($"+{exp:N0} EXP");
+
+                int roubles = obj["roubles"]?.ToObject<int>() ?? 0;
+                if (roubles > 0)
+                    lines.Add($"+{roubles:N0} Roubles");
+
+                var money = obj["money"];
+                if (money != null)
+                {
+                    int amount = money["amount"]?.ToObject<int>() ?? 0;
+                    string currency = money["currency"]?.ToString() ?? "RUB";
+                    if (amount > 0)
+                        lines.Add($"+{amount:N0} {currency}");
+                }
+
+                double standing = obj["trader_standing"]?.ToObject<double>() ?? 0.0;
+                if (Math.Abs(standing) > 0.001)
+                    lines.Add($"+{standing:F2} trader standing");
+
+                var items = obj["items"] as JArray;
+                if (items != null)
+                {
+                    foreach (var item in items.OfType<JObject>())
+                    {
+                        string tpl = item["tpl"]?.ToString() ?? "";
+                        int count = item["count"]?.ToObject<int>() ?? 1;
+                        bool fir = item["found_in_raid"]?.ToObject<bool>() ?? false;
+                        string name = ResolveItemName(tpl);
+                        lines.Add($"+{count}x {name}{(fir ? " (Found in Raid)" : "")}");
+                    }
+                }
+            }
+            else if (rewards is JArray arr)
+            {
+                foreach (var r in arr.OfType<JObject>())
+                {
+                    string type = r["type"]?.ToString() ?? "";
+                    string value = r["value"]?.ToString() ?? "";
+
+                    switch (type)
+                    {
+                        case "Experience":
+                            if (int.TryParse(value, out int expv) && expv > 0)
+                                lines.Add($"+{expv:N0} EXP");
+                            break;
+                        case "Item":
+                            var itemsArr = r["items"] as JArray;
+                            if (itemsArr != null)
+                            {
+                                bool findInRaid = r["findInRaid"]?.ToObject<bool>() ?? false;
+                                foreach (var it in itemsArr.OfType<JObject>())
+                                {
+                                    string tpl = it["_tpl"]?.ToString() ?? "";
+                                    int count = it["upd"]?["StackObjectsCount"]?.ToObject<int>() ?? 1;
+                                    string name = ResolveItemName(tpl);
+                                    lines.Add($"+{count}x {name}{(findInRaid ? " (Found in Raid)" : "")}");
+                                }
+                            }
+                            break;
+                        case "TraderStanding":
+                            if (double.TryParse(value, out double st) && Math.Abs(st) > 0.001)
+                                lines.Add($"+{st:F2} standing");
+                            break;
+                        case "Skill":
+                            lines.Add($"Skill {r["target"]}: +{value}");
+                            break;
+                        case "Unlock":
+                            lines.Add($"Unlock: {r["target"]}");
+                            break;
+                        default:
+                            if (!string.IsNullOrEmpty(value))
+                                lines.Add($"+{value} {type}");
+                            break;
+                    }
+                }
+            }
+
+            if (lines.Count == 0)
+                return string.Empty;
+
+            return "\n\nRewards:\n" + string.Join("\n", lines.Select(l => "- " + l));
+        }
+
+        private static string ResolveItemName(string tpl)
+        {
+            if (string.IsNullOrWhiteSpace(tpl))
+                return "item";
+
+            if (_itemNameCache.TryGetValue(tpl, out var cached))
+                return cached;
+
+            var name = TryLocalize($"{tpl} Name");
+            if (string.IsNullOrWhiteSpace(name))
+                name = TryLocalize($"{tpl} ShortName");
+
+            if (string.IsNullOrWhiteSpace(name))
+                name = tpl;
+
+            _itemNameCache[tpl] = name;
+            return name;
+        }
+
+        private static readonly Dictionary<string, string> _itemNameCache = new Dictionary<string, string>();
+        private static readonly Dictionary<string, string> _localizationCache = new Dictionary<string, string>();
+        private static MethodInfo _localizedMethod;
+
+        private static string TryLocalize(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+                return string.Empty;
+            if (_localizationCache.TryGetValue(key, out var cached))
+                return cached;
+
+            if (_localizedMethod == null)
+            {
+                _localizedMethod = FindStringLocalizedMethod();
+                if (_localizedMethod == null)
+                    return string.Empty;
+            }
+
+            string result = string.Empty;
+            try
+            {
+                result = _localizedMethod.Invoke(null, new object[] { key, null }) as string ?? string.Empty;
+            }
+            catch { }
+
+            _localizationCache[key] = result;
+            return result;
+        }
+
+        private static MethodInfo FindStringLocalizedMethod()
+        {
+            try
+            {
+                foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    if (!((assembly.FullName?.StartsWith("Assembly-CSharp") == true) ||
+                          (assembly.FullName?.StartsWith("EFT") == true) ||
+                          (assembly.FullName?.StartsWith("SPT") == true)))
+                        continue;
+
+                    Type[] types;
+                    try { types = assembly.GetTypes(); } catch { continue; }
+                    foreach (var type in types)
+                    {
+                        if (!type.IsClass || type.IsAbstract)
+                            continue;
+
+                        var method = type.GetMethod("Localized", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static, null,
+                            new[] { typeof(string), typeof(string) }, null);
+                        if (method != null && method.ReturnType == typeof(string))
+                            return method;
+                    }
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        private void ShowErrorPopup(string message)
+        {
+            NotificationManagerClass.DisplayWarningNotification(message);
         }
 
         private static void SetServiceItemText(GameObject row, string text)
