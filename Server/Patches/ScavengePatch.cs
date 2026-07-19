@@ -117,6 +117,12 @@ public class ScavengePatch : AbstractPatch
                     return false;
                 }
 
+                // Exclude blacklisted slots (secure container, armband, melee, etc.)
+                if (QuartermasterConstants.Scavenged.ExcludedSlots.Contains(item.SlotId ?? string.Empty))
+                {
+                    return false;
+                }
+
                 return true;
             }).ToList();
 

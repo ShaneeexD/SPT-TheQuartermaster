@@ -173,7 +173,7 @@ public static class ContractQuestBuilder
             var remaining = expiryUtc - DateTimeOffset.UtcNow;
             if (remaining.TotalSeconds > 0)
             {
-                var expiryIso = expiryUtc.ToString("yyyy-MM-ddTHH:mm:ssZ");
+                var expiryIso = expiryUtc.ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture);
                 var hours = (int)remaining.TotalHours;
                 var minutes = remaining.Minutes;
                 var timeLabel = hours > 0 ? $"{hours}h {minutes}m" : $"{minutes}m";

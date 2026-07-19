@@ -1,8 +1,12 @@
 using System;
+using System.IO;
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using TheQuartermaster.Client.Patches;
+using TheQuartermaster.Client.Services;
+using TheQuartermaster.Client.UI;
+using UnityEngine;
 
 namespace TheQuartermaster.Client
 {
@@ -27,6 +31,25 @@ namespace TheQuartermaster.Client
                 new QuestExpiryCountdownPatch().Enable();
                 new TagComponentInjectionPatch().Enable();
                 new ScavengedTagPatch().Enable();
+
+                var pluginFolder = Path.GetDirectoryName(typeof(Plugin).Assembly.Location);
+                CommunityApiClient.Init(Config, pluginFolder);
+
+                var panelObject = new GameObject("CommunityPanel");
+                panelObject.hideFlags = HideFlags.HideAndDontSave;
+                DontDestroyOnLoad(panelObject);
+                panelObject.AddComponent<CommunityPanel>();
+
+                try
+                {
+                    new CommunityTabPatch().Enable();
+                    if (DebugLogging)
+                        Log.LogInfo("[TheQuartermaster] Community tab patch enabled.");
+                }
+                catch (Exception tabEx)
+                {
+                    Log.LogWarning($"[TheQuartermaster] Community tab patch could not be enabled; use F9 to open the panel: {tabEx.Message}");
+                }
 
                 if (DebugLogging)
                     Log.LogInfo("The Quartermaster Client loaded successfully!");

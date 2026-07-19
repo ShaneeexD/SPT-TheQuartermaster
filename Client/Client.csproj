@@ -37,11 +37,16 @@
       <HintPath>$(SPTPath)\EscapeFromTarkov_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>$(SPTPath)\EscapeFromTarkov_Data\Managed\UnityEngine.InputLegacyModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="Newtonsoft.Json">
       <HintPath>$(SPTPath)\EscapeFromTarkov_Data\Managed\Newtonsoft.Json.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Net.Http" />
     
     <!-- TextMeshPro -->
     <Reference Include="Unity.TextMeshPro">
@@ -50,6 +55,10 @@
     </Reference>
     <Reference Include="UnityEngine.UI">
       <HintPath>$(SPTPath)\EscapeFromTarkov_Data\Managed\UnityEngine.UI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>$(SPTPath)\EscapeFromTarkov_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="Sirenix.Serialization">

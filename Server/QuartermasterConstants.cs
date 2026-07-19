@@ -95,6 +95,15 @@ public static class QuartermasterConstants
             "Backpack", "TacticalVest", "Pockets"
         };
 
+        // Slots that should never be scavenged
+        public static readonly HashSet<string> ExcludedSlots = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "SecuredContainer",
+            "ArmBand",
+            "Scabbard",     // melee weapon slot
+            "Melee"
+        };
+
         public const string ListingMetadataSource = "scavenged";
     }
 }

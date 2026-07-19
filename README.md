@@ -31,6 +31,28 @@ Now it's available for you.
 When it's gone, it's gone.
 
 
+## Scavenging
+
+Death in Tarkov is brutal. But it doesn't go to waste.
+
+When a player dies in a raid, The Quartermaster's workers move in. They scavenge one item from the corpse and bring it back.
+
+The item is held for a delay period before hitting the marketplace. Someone's loss becomes someone else's find.
+
+Scavenged items display the profile name of the fallen player as a tag on the bottom left of the item icon - a grim reminder of where it came from. Once purchased, the tag is removed. The past is erased.
+
+
+## Community Reward Packages
+
+Loyalty doesn't go unnoticed.
+
+Players who contribute to the community through marketplace purchases will receive weekly reward crates from The Quartermaster.
+
+The more you spend, the better your tier. Higher tiers contain better gear - ammo, medical supplies, weapons, armour, and more.
+
+Crates arrive via in-game mail. Open them to see what The Quartermaster has secured for you this week.
+
+
 ## Community Contracts
 
 The Quartermaster's work changes over time.
