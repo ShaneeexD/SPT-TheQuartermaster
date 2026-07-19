@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using EFT.UI;
@@ -7,6 +8,7 @@ using TheQuartermaster.Client.Services;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 
 namespace TheQuartermaster.Client.UI
 {
@@ -27,6 +29,15 @@ namespace TheQuartermaster.Client.UI
         private List<Tab> _siblingTabs = new List<Tab>();
         private int _communityTabOriginalSiblingIndex = -1;
         private bool _wasOnQM = false;
+        private RectTransform _contentArea;
+        private GameObject _communityScreen;
+        private Text _statusText;
+        private Transform _submissionListContainer;
+        private GameObject _listView;
+        private GameObject _detailView;
+        private Button _refreshButton;
+        private Button _linkButton;
+        private TMP_Text _linkButtonText;
 
         public Component CurrentTraderScreen { get; set; }
 
@@ -37,10 +48,7 @@ namespace TheQuartermaster.Client.UI
             {
                 _visible = value;
                 if (_visible)
-                {
-                    _cachedSubmissions = null;
                     TryRefreshSubmissions();
-                }
             }
         }
 
@@ -63,10 +71,6 @@ namespace TheQuartermaster.Client.UI
 
         private void Update()
         {
-            if (Input.GetKeyDown(KeyCode.F9))
-            {
-                Visible = !Visible;
-            }
         }
 
         private void LateUpdate()
@@ -85,224 +89,6 @@ namespace TheQuartermaster.Client.UI
                 return;
             _lastSubmissionsRefresh = Time.time;
             CommunityApiClient.LoadSubmissions();
-        }
-
-        private void OnGUI()
-        {
-            if (!_visible)
-                return;
-
-            var width = Mathf.Min(900, Screen.width - 40);
-            var height = Mathf.Min(700, Screen.height - 80);
-            var windowRect = new Rect((Screen.width - width) / 2f, (Screen.height - height) / 2f, width, height);
-
-            GUI.Window(0, windowRect, DrawWindow, "The Quartermaster - Community Contracts");
-        }
-
-        private void DrawWindow(int id)
-        {
-            GUILayout.BeginVertical();
-            DrawHeader();
-            GUILayout.Space(10);
-            if (_showDetails && CommunityApiClient.SelectedSubmission != null)
-                DrawDetails();
-            else
-                DrawList();
-            GUILayout.EndVertical();
-            GUI.DragWindow(new Rect(0, 0, 10000, 20));
-        }
-
-        private void DrawHeader()
-        {
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Refresh", GUILayout.Width(80)))
-            {
-                _lastSubmissionsRefresh = -999f;
-                TryRefreshSubmissions();
-            }
-
-            GUILayout.FlexibleSpace();
-
-            if (CommunityApiClient.IsLinked)
-            {
-                GUILayout.Label($"Linked: {CommunityApiClient.DisplayName}");
-                if (GUILayout.Button("Unlink", GUILayout.Width(80)))
-                {
-                    // Clearing the token would require a new link; for now, just reload the link code.
-                    CommunityApiClient.RequestLinkCode();
-                }
-            }
-            else
-            {
-                if (GUILayout.Button("Link Discord", GUILayout.Width(120)))
-                {
-                    if (string.IsNullOrWhiteSpace(CommunityApiClient.LinkCode))
-                        CommunityApiClient.RequestLinkCode();
-                    else
-                        Application.OpenURL($"https://serenity-workshop.netlify.app/link?code={CommunityApiClient.LinkCode}");
-                }
-            }
-
-            if (GUILayout.Button("X", GUILayout.Width(40)))
-            {
-                Visible = false;
-            }
-            GUILayout.EndHorizontal();
-
-            if (!string.IsNullOrWhiteSpace(CommunityApiClient.LinkCode))
-            {
-                var remaining = Mathf.Max(0, (CommunityApiClient.LinkCodeExpiresAt - UnixMs()) / 1000f);
-                GUILayout.Label($"Link Code: {CommunityApiClient.LinkCode} (expires in {remaining:F0}s)");
-                if (GUILayout.Button("Open Link Page"))
-                {
-                    Application.OpenURL($"https://serenity-workshop.netlify.app/link?code={CommunityApiClient.LinkCode}");
-                }
-            }
-
-            if (!string.IsNullOrWhiteSpace(_errorMessage))
-            {
-                GUI.color = Color.red;
-                GUILayout.Label($"Error: {_errorMessage}");
-                GUI.color = Color.white;
-            }
-        }
-
-        private List<JObject> _cachedSubmissions;
-
-        private void DrawList()
-        {
-            // Cache submissions at start of draw to avoid layout mismatch if list changes between Layout/Repaint
-            if (_cachedSubmissions == null)
-                _cachedSubmissions = CommunityApiClient.Submissions.ToList();
-
-            _listScroll = GUILayout.BeginScrollView(_listScroll);
-            if (_cachedSubmissions.Count == 0)
-            {
-                GUILayout.Label("No pending community submissions.");
-            }
-            else
-            {
-                GUILayout.Label($"Pending Submissions ({_cachedSubmissions.Count})");
-                foreach (var submission in _cachedSubmissions)
-                {
-                    DrawSubmissionRow(submission);
-                    GUILayout.Space(4);
-                }
-            }
-            GUILayout.EndScrollView();
-        }
-
-        private void DrawSubmissionRow(JObject submission)
-        {
-            var id = submission["id"]?.ToString() ?? string.Empty;
-            var title = submission["title"]?.ToString() ?? "Untitled";
-            var author = submission["created_by"]?.ToString() ?? "Unknown";
-            var upvotes = submission["upvotes"]?.ToObject<int>() ?? 0;
-            var downvotes = submission["downvotes"]?.ToObject<int>() ?? 0;
-            var ratio = submission["approval_ratio"]?.ToObject<float>() ?? 0f;
-            var total = upvotes + downvotes;
-
-            GUILayout.BeginHorizontal(GUI.skin.box, GUILayout.ExpandWidth(true));
-            GUILayout.BeginVertical();
-            GUILayout.Label($"<b>{title}</b>  by {author}");
-            GUILayout.Label($"Support: {ratio:F0}% ({upvotes}/{total})");
-            GUILayout.EndVertical();
-
-            GUILayout.BeginVertical(GUILayout.Width(120));
-            if (GUILayout.Button("View"))
-            {
-                CommunityApiClient.SelectedSubmission = submission;
-                _showDetails = true;
-            }
-            GUILayout.EndVertical();
-            GUILayout.EndHorizontal();
-        }
-
-        private void DrawDetails()
-        {
-            var s = CommunityApiClient.SelectedSubmission;
-            if (s == null)
-            {
-                _showDetails = false;
-                return;
-            }
-
-            var id = s["id"]?.ToString() ?? string.Empty;
-            var title = s["title"]?.ToString() ?? "Untitled";
-            var author = s["created_by"]?.ToString() ?? "Unknown";
-            var description = s["description"]?.ToString() ?? string.Empty;
-            var upvotes = s["upvotes"]?.ToObject<int>() ?? 0;
-            var downvotes = s["downvotes"]?.ToObject<int>() ?? 0;
-            var ratio = s["approval_ratio"]?.ToObject<float>() ?? 0f;
-
-            _listScroll = GUILayout.BeginScrollView(_listScroll);
-            GUILayout.Label($"<size=16><b>{title}</b></size>");
-            GUILayout.Label($"Author: {author}");
-            GUILayout.Label($"Support: {ratio:F0}%  Upvotes: {upvotes}  Downvotes: {downvotes}");
-            GUILayout.Space(10);
-            GUILayout.Label("Description:");
-            GUILayout.Label(description, GUI.skin.textArea, GUILayout.ExpandWidth(true), GUILayout.ExpandHeight(true));
-
-            DrawObjectives(s["objectives"] as JArray);
-            DrawRewards(s["rewards"]); // may be object or already string
-
-            GUILayout.Space(20);
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Support", GUILayout.Height(40)))
-            {
-                if (CommunityApiClient.IsLinked)
-                    CommunityApiClient.CastVote(id, true);
-                else
-                    _errorMessage = "Link Discord before voting.";
-            }
-            if (GUILayout.Button("Reject", GUILayout.Height(40)))
-            {
-                if (CommunityApiClient.IsLinked)
-                    CommunityApiClient.CastVote(id, false);
-                else
-                    _errorMessage = "Link Discord before voting.";
-            }
-            GUILayout.EndHorizontal();
-            GUILayout.Space(10);
-            if (GUILayout.Button("Back"))
-            {
-                _showDetails = false;
-                CommunityApiClient.SelectedSubmission = null;
-            }
-            GUILayout.EndScrollView();
-        }
-
-        private void DrawObjectives(JArray objectives)
-        {
-            GUILayout.Label("Objectives:");
-            if (objectives == null || objectives.Count == 0)
-            {
-                GUILayout.Label("None specified.");
-                return;
-            }
-            foreach (var obj in objectives.OfType<JObject>())
-            {
-                var desc = obj["description"]?.ToString() ?? obj.ToString();
-                GUILayout.Label($"- {desc}");
-            }
-        }
-
-        private void DrawRewards(JToken rewards)
-        {
-            GUILayout.Label("Rewards:");
-            if (rewards == null)
-            {
-                GUILayout.Label("None specified.");
-                return;
-            }
-            if (rewards.Type == JTokenType.String)
-            {
-                GUILayout.Label(rewards.ToString(), "box");
-            }
-            else
-            {
-                GUILayout.Label(rewards.ToString(), "box");
-            }
         }
 
         public void RefreshCommunityTab()
@@ -379,18 +165,23 @@ namespace TheQuartermaster.Client.UI
             else
             {
                 _qmDetected = false;
-                _wasOnQM = false;
                 if (_communityTab != null && _communityTab.activeSelf)
                 {
-                    Plugin.Log.LogInfo($"[TheQuartermaster] Not on QM (current: {traderName ?? "unknown"}) — deselecting and greying out QM tab.");
+                    if (_wasOnQM)
+                        Plugin.Log.LogInfo($"[TheQuartermaster] Not on QM (current: {traderName ?? "unknown"}) — deselecting and greying out QM tab.");
                     if (_communityTabComponent != null)
                     {
+                        // Deselect via controller to hide the CommunityScreen
+                        _communityTabComponent.Deselect();
                         // Force deselect: set bool_0=false, _uiSelected=false, then update visuals
                         _communityTabComponent.UpdateVisual(false, false);
                         // Grey out and disable interaction
                         _communityTabComponent.Interactable = false;
                         _communityTabComponent.vmethod_0(false);
                     }
+                    // Also hide the screen directly in case controller didn't
+                    if (_communityScreen != null)
+                        _communityScreen.SetActive(false);
                     // Also reset CanvasGroup directly
                     var cg = _communityTab.GetComponent<CanvasGroup>();
                     if (cg != null)
@@ -404,6 +195,7 @@ namespace TheQuartermaster.Client.UI
                         _communityTab.transform.SetSiblingIndex(_communityTabOriginalSiblingIndex);
                     Visible = false;
                 }
+                _wasOnQM = false;
             }
         }
 
@@ -524,6 +316,98 @@ namespace TheQuartermaster.Client.UI
 
                 // Store tab bar parent and collect sibling tabs
                 _tabBarParent = tabs;
+
+                // Find the content area — look for one of the screen GameObjects (ServicesScreen, QuestsScreen, TraderDealScreen)
+                var screenParent = tabs.parent;
+                Transform contentArea = null;
+                foreach (Transform child in screenParent)
+                {
+                    var name = child.name;
+                    if (name == "ServicesScreen" || name == "QuestsScreen" || name == "TraderDealScreen" || name == "Content")
+                    {
+                        contentArea = child as RectTransform;
+                        break;
+                    }
+                }
+                if (contentArea == null)
+                {
+                    // Search deeper — the screens might be nested
+                    foreach (Transform child in screenParent)
+                    {
+                        if (child == tabs) continue;
+                        var rt = child as RectTransform;
+                        if (rt != null && rt.rect.height > 200f)
+                        {
+                            contentArea = rt;
+                            break;
+                        }
+                    }
+                }
+                _contentArea = contentArea as RectTransform;
+                Plugin.Log.LogInfo($"[TheQuartermaster] Content area: {(_contentArea?.name ?? "null")}");
+
+                // Clone the ServicesScreen content panel to use as our screen
+                // Search recursively — it may not be a direct child of screenParent
+                Plugin.Log.LogInfo($"[TheQuartermaster] Searching for ServicesScreen. screenParent={screenParent.name}, childCount={screenParent.childCount}");
+                for (int i = 0; i < screenParent.childCount; i++)
+                {
+                    var child = screenParent.GetChild(i);
+                    Plugin.Log.LogInfo($"[TheQuartermaster]   screenParent child[{i}]: {child.name} active={child.gameObject.activeSelf}");
+                }
+
+                GameObject servicesScreenObj = null;
+                // First try direct children
+                foreach (Transform child in screenParent)
+                {
+                    if (child.name == "ServicesScreen")
+                    {
+                        servicesScreenObj = child.gameObject;
+                        break;
+                    }
+                }
+                // If not found, search recursively in the entire trader screen
+                if (servicesScreenObj == null)
+                {
+                    Plugin.Log.LogInfo("[TheQuartermaster] ServicesScreen not a direct child of screenParent, searching recursively...");
+                    foreach (var t in CurrentTraderScreen.GetComponentsInChildren<Transform>(true))
+                    {
+                        if (t.name == "ServicesScreen")
+                        {
+                            servicesScreenObj = t.gameObject;
+                            Plugin.Log.LogInfo($"[TheQuartermaster] Found ServicesScreen at path: {GetPath(t)}");
+                            break;
+                        }
+                    }
+                }
+                if (servicesScreenObj != null)
+                {
+                    // Parent the clone to the same parent as the original ServicesScreen (e.g. Trader Screens Group),
+                    // NOT to screenParent (Tab Bar) which is where the tabs live.
+                    var screenParentCorrect = servicesScreenObj.transform.parent;
+                    var screenClone = Instantiate(servicesScreenObj, screenParentCorrect);
+                    screenClone.name = "CommunityScreen";
+
+                    // Strip the ServicesScreen component — we don't want it trying to show services
+                    var svcComp = screenClone.GetComponent<ServicesScreen>();
+                    if (svcComp != null)
+                        Destroy(svcComp);
+
+                    // Deactivate initially
+                    screenClone.SetActive(false);
+                    _communityScreen = screenClone;
+
+                    // Build our voting UI into the cloned screen
+                    BuildCommunityUI(screenClone);
+
+                    // Create a controller and init the tab so Select/Deselect manages our screen
+                    var controller = new CommunityScreenController(screenClone);
+                    tab.Init(controller);
+                    Plugin.Log.LogInfo("[TheQuartermaster] Created CommunityScreen and wired up controller.");
+                }
+                else
+                {
+                    Plugin.Log.LogWarning("[TheQuartermaster] Could not find ServicesScreen to clone for content panel.");
+                }
                 _siblingTabs.Clear();
                 foreach (Transform sibling in tabs)
                 {
@@ -624,10 +508,12 @@ namespace TheQuartermaster.Client.UI
 
         private void OnCommunityTabSelectionChanged(Tab tab, bool selected)
         {
+            Plugin.Log.LogInfo($"[TheQuartermaster] OnCommunityTabSelectionChanged: selected={selected}");
             if (selected)
             {
-                // Select our tab visually (sendCallback=false: don't call Controller.Show on cloned controller)
-                _communityTabComponent.Select(false, false);
+                // Select with sendCallback=true so Controller.Show() activates our CommunityScreen
+                _communityTabComponent.Select(true, false);
+                Plugin.Log.LogInfo($"[TheQuartermaster] CommunityScreen active={(_communityScreen != null && _communityScreen.activeSelf)}");
 
                 // Deselect all sibling tabs (hides their content panels via Controller.TryHide)
                 foreach (var siblingTab in _siblingTabs)
@@ -637,15 +523,15 @@ namespace TheQuartermaster.Client.UI
                 if (_communityTab != null && _tabBarParent != null)
                     _communityTab.transform.SetAsLastSibling();
 
-                Visible = true;
+                // Refresh submission data when tab is opened
+                TryRefreshSubmissions();
+                PopulateSubmissionList();
             }
             else
             {
                 // Restore original sibling index so it renders behind Services again
                 if (_communityTab != null && _tabBarParent != null && _communityTabOriginalSiblingIndex >= 0)
                     _communityTab.transform.SetSiblingIndex(_communityTabOriginalSiblingIndex);
-
-                Visible = false;
             }
         }
 
@@ -655,16 +541,345 @@ namespace TheQuartermaster.Client.UI
             {
                 Plugin.Log.LogInfo($"[TheQuartermaster] Sibling tab {selectedTab.name} selected, deselecting QM tab.");
 
-                // A sibling tab was selected — deselect Community and hide panel
+                // A sibling tab was selected — deselect Community (Controller.TryHide deactivates our screen)
                 _communityTabComponent.UpdateVisual(false, false);
                 _communityTabComponent.Deselect();
 
                 // Restore original sibling index so it renders behind Services again
                 if (_communityTab != null && _tabBarParent != null && _communityTabOriginalSiblingIndex >= 0)
                     _communityTab.transform.SetSiblingIndex(_communityTabOriginalSiblingIndex);
-
-                Visible = false;
             }
+        }
+
+        private GameObject _serviceItemTemplate;
+
+        private void BuildCommunityUI(GameObject screenRoot)
+        {
+            // Based on the known ServicesScreen hierarchy:
+            //   ServicesScreen > Services > Ragman > ServicesList > Header > Title (Text)
+            //   ServicesScreen > Services > Ragman > ServicesList > List > Scroll View > Content > ServiceItem (template)
+            //   ServicesScreen > Services > ArenaEftItemTransferWindow (hide)
+            //   ServicesScreen > Services > Ragman > TacticalClothingView (hide)
+
+            // Find the Services container
+            var services = FindChild(screenRoot.transform, "Services");
+            if (services == null)
+            {
+                Plugin.Log.LogError("[TheQuartermaster] Could not find 'Services' child in cloned screen.");
+                return;
+            }
+
+            // Hide ArenaEftItemTransferWindow — we don't need it
+            var arena = FindChild(services, "ArenaEftItemTransferWindow");
+            if (arena != null)
+            {
+                arena.gameObject.SetActive(false);
+                Plugin.Log.LogInfo("[TheQuartermaster] Hidden ArenaEftItemTransferWindow.");
+            }
+
+            // Find Ragman > ServicesList
+            var ragman = FindChild(services, "Ragman");
+            if (ragman == null)
+            {
+                Plugin.Log.LogError("[TheQuartermaster] Could not find 'Ragman' child.");
+                return;
+            }
+
+            // Activate Ragman (parent of ServicesList) — it's inactive by default in the cloned screen
+            ragman.gameObject.SetActive(true);
+            Plugin.Log.LogInfo("[TheQuartermaster] Activated Ragman container.");
+
+            // Hide TacticalClothingView (the player model preview) — we don't need it
+            var clothingView = FindChild(ragman, "TacticalClothingView");
+            if (clothingView != null)
+            {
+                clothingView.gameObject.SetActive(false);
+                Plugin.Log.LogInfo("[TheQuartermaster] Hidden TacticalClothingView.");
+            }
+
+            var servicesList = FindChild(ragman, "ServicesList");
+            if (servicesList == null)
+            {
+                Plugin.Log.LogError("[TheQuartermaster] Could not find 'ServicesList'.");
+                return;
+            }
+
+            // Activate ServicesList so we can see its contents
+            servicesList.gameObject.SetActive(true);
+
+            // Add padding to the top of the list so items don't overlap the header
+            var listContainer = FindChild(servicesList, "List");
+            if (listContainer != null)
+            {
+                var listRT = listContainer.GetComponent<RectTransform>();
+                if (listRT != null)
+                {
+                    // Push the list down a bit so it doesn't overlap the header
+                    listRT.offsetMin = new Vector2(listRT.offsetMin.x, listRT.offsetMin.y);
+                    listRT.offsetMax = new Vector2(listRT.offsetMax.x, listRT.offsetMax.y - 40f);
+                    Plugin.Log.LogInfo("[TheQuartermaster] Adjusted List position to avoid header overlap.");
+                }
+            }
+
+            // Find Header > Title and use it as our status text
+            var header = FindChild(servicesList, "Header");
+            if (header != null)
+            {
+                header.gameObject.SetActive(true);
+                var title = header.Find("Title");
+                if (title != null)
+                {
+                    var titleText = title.GetComponent<Text>();
+                    if (titleText != null)
+                    {
+                        _statusText = titleText;
+                        _statusText.text = "Community Contracts";
+                        Plugin.Log.LogInfo("[TheQuartermaster] Repurposed ServicesList Header Title as status text.");
+                    }
+                }
+            }
+
+            // Find List > Scroll View > Content — this is our submission list container
+            var list = FindChild(servicesList, "List");
+            if (list != null)
+            {
+                var scrollView = FindChild(list, "Scroll View");
+                if (scrollView != null)
+                {
+                    var scrollRect = scrollView.GetComponent<ScrollRect>();
+                    if (scrollRect != null)
+                    {
+                        _listView = scrollView.gameObject;
+                        _submissionListContainer = scrollRect.content;
+                        // Add left padding so items are clamped left with some spacing
+                        var vlg = _submissionListContainer.GetComponent<VerticalLayoutGroup>();
+                        if (vlg != null)
+                        {
+                            vlg.padding = new RectOffset(15, 15, 5, 5);
+                            vlg.spacing = 5;
+                            Plugin.Log.LogInfo("[TheQuartermaster] Added padding to submission list container.");
+                        }
+                        Plugin.Log.LogInfo($"[TheQuartermaster] Repurposed scroll content '{_submissionListContainer.name}' as submission list.");
+                    }
+
+                    // Find ServiceItem template in Content
+                    if (_submissionListContainer != null)
+                    {
+                        var serviceItem = FindChild(_submissionListContainer, "ServiceItem");
+                        if (serviceItem != null)
+                        {
+                            _serviceItemTemplate = serviceItem.gameObject;
+                            _serviceItemTemplate.SetActive(false);
+                            Plugin.Log.LogInfo("[TheQuartermaster] Found ServiceItem template, stored and hidden.");
+                        }
+                    }
+                }
+            }
+
+            Plugin.Log.LogInfo("[TheQuartermaster] Repurposed existing ServicesScreen UI successfully.");
+        }
+
+        private static Transform FindChild(Transform parent, string name)
+        {
+            for (int i = 0; i < parent.childCount; i++)
+            {
+                var child = parent.GetChild(i);
+                if (child.name == name)
+                    return child;
+            }
+            return null;
+        }
+
+        private void LogHierarchy(Transform t, int depth)
+        {
+            var indent = new string(' ', depth * 2);
+            var components = t.GetComponents<Component>();
+            var compNames = components.Select(c => c.GetType().Name);
+            Plugin.Log.LogInfo($"[TheQuartermaster] {indent}{t.name} [{string.Join(", ", compNames)}] active={t.gameObject.activeSelf}");
+            for (int i = 0; i < t.childCount; i++)
+                LogHierarchy(t.GetChild(i), depth + 1);
+        }
+
+        private static string GetPath(Transform t)
+        {
+            var path = t.name;
+            var parent = t.parent;
+            while (parent != null)
+            {
+                path = parent.name + "/" + path;
+                parent = parent.parent;
+            }
+            return path;
+        }
+
+        private void PopulateSubmissionList()
+        {
+            if (_submissionListContainer == null) return;
+
+            // Clear existing rows (keep the template)
+            for (int i = _submissionListContainer.childCount - 1; i >= 0; i--)
+            {
+                var child = _submissionListContainer.GetChild(i);
+                if (child.gameObject == _serviceItemTemplate) continue;
+                Destroy(child.gameObject);
+            }
+
+            var submissions = CommunityApiClient.Submissions;
+            if (submissions.Count == 0)
+            {
+                if (_statusText != null)
+                    _statusText.text = "No pending community submissions.";
+                return;
+            }
+
+            if (_statusText != null)
+                _statusText.text = $"Pending Submissions ({submissions.Count})";
+
+            foreach (var submission in submissions)
+            {
+                CreateSubmissionRow(submission);
+            }
+        }
+
+        private void CreateSubmissionRow(JObject submission)
+        {
+            var title = submission["title"]?.ToString() ?? "Untitled";
+            var author = submission["created_by"]?.ToString() ?? "Unknown";
+            var upvotes = submission["upvotes"]?.ToObject<int>() ?? 0;
+            var downvotes = submission["downvotes"]?.ToObject<int>() ?? 0;
+            var ratio = submission["approval_ratio"]?.ToObject<float>() ?? 0f;
+            var total = upvotes + downvotes;
+
+            // Clone the ServiceItem template
+            if (_serviceItemTemplate == null)
+            {
+                Plugin.Log.LogWarning("[TheQuartermaster] No ServiceItem template, cannot create submission row.");
+                return;
+            }
+
+            var rowObj = Instantiate(_serviceItemTemplate, _submissionListContainer, false);
+            rowObj.name = "SubmissionRow_" + (submission["id"]?.ToString() ?? "?");
+            rowObj.SetActive(true);
+
+            // Set the ServiceName text
+            var serviceName = FindChild(rowObj.transform, "ServiceName");
+            if (serviceName != null)
+            {
+                var nameText = serviceName.GetComponent<TextMeshProUGUI>();
+                if (nameText != null)
+                    nameText.text = $"{title}  by {author}  |  Support: {ratio:F0}% ({upvotes}/{total})";
+            }
+
+            // Hide SelectedArrow
+            var arrow = FindChild(rowObj.transform, "SelectedArrow");
+            if (arrow != null) arrow.gameObject.SetActive(false);
+
+            // Hide ServiceIcon stuff
+            var iconBg = FindChild(rowObj.transform, "ServiceIconBackground");
+            if (iconBg != null) iconBg.gameObject.SetActive(false);
+
+            // Wire up click to show details
+            var btn = rowObj.GetComponent<Button>();
+            if (btn != null)
+            {
+                btn.onClick.RemoveAllListeners();
+                btn.onClick.AddListener(() => ShowSubmissionDetails(submission));
+            }
+        }
+
+        private void ShowSubmissionDetails(JObject submission)
+        {
+            var title = submission["title"]?.ToString() ?? "Untitled";
+            var author = submission["created_by"]?.ToString() ?? "Unknown";
+            var description = submission["description"]?.ToString() ?? string.Empty;
+            var upvotes = submission["upvotes"]?.ToObject<int>() ?? 0;
+            var downvotes = submission["downvotes"]?.ToObject<int>() ?? 0;
+            var ratio = submission["approval_ratio"]?.ToObject<float>() ?? 0f;
+
+            // Show details in the status text
+            if (_statusText != null)
+            {
+                var objectives = submission["objectives"] as JArray;
+                var objText = "";
+                if (objectives != null && objectives.Count > 0)
+                {
+                    objText = "\n\nObjectives:";
+                    foreach (var obj in objectives.OfType<JObject>())
+                    {
+                        var desc = obj["description"]?.ToString() ?? obj.ToString();
+                        objText += $"\n- {desc}";
+                    }
+                }
+
+                var rewards = submission["rewards"];
+                var rewardText = rewards != null ? $"\n\nRewards:\n{rewards}" : "";
+
+                _statusText.text = $"{title}\nby {author}  |  Support: {ratio:F0}%  Up: {upvotes}  Down: {downvotes}\n\n{description}{objText}{rewardText}";
+            }
+
+            // Replace list with a back button using the ServiceItem template
+            if (_submissionListContainer != null && _serviceItemTemplate != null)
+            {
+                for (int i = _submissionListContainer.childCount - 1; i >= 0; i--)
+                {
+                    var child = _submissionListContainer.GetChild(i);
+                    if (child.gameObject == _serviceItemTemplate) continue;
+                    Destroy(child.gameObject);
+                }
+
+                var backRow = Instantiate(_serviceItemTemplate, _submissionListContainer, false);
+                backRow.name = "BackRow";
+                backRow.SetActive(true);
+
+                var serviceName = FindChild(backRow.transform, "ServiceName");
+                if (serviceName != null)
+                {
+                    var nameText = serviceName.GetComponent<TextMeshProUGUI>();
+                    if (nameText != null)
+                        nameText.text = "< Back to list";
+                }
+
+                var arrow = FindChild(backRow.transform, "SelectedArrow");
+                if (arrow != null) arrow.gameObject.SetActive(false);
+                var iconBg = FindChild(backRow.transform, "ServiceIconBackground");
+                if (iconBg != null) iconBg.gameObject.SetActive(false);
+
+                var btn = backRow.GetComponent<Button>();
+                if (btn != null)
+                {
+                    btn.onClick.RemoveAllListeners();
+                    btn.onClick.AddListener(() => { PopulateSubmissionList(); });
+                }
+            }
+        }
+
+        private void OnRefreshButtonClicked()
+        {
+            _lastSubmissionsRefresh = -999f;
+            TryRefreshSubmissions();
+            PopulateSubmissionList();
+        }
+
+        private void OnLinkButtonClicked()
+        {
+            if (CommunityApiClient.IsLinked)
+            {
+                CommunityApiClient.RequestLinkCode();
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(CommunityApiClient.LinkCode))
+                    CommunityApiClient.RequestLinkCode();
+                else
+                    Application.OpenURL($"https://serenity-workshop.netlify.app/link?code={CommunityApiClient.LinkCode}");
+            }
+            UpdateLinkButton();
+        }
+
+        private void UpdateLinkButton()
+        {
+            if (_linkButtonText == null) return;
+            _linkButtonText.text = CommunityApiClient.IsLinked ? $"Linked: {CommunityApiClient.DisplayName}" : "Link Discord";
         }
 
         private static long UnixMs()
