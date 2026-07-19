@@ -114,7 +114,7 @@ namespace TheQuartermaster.Client.UI
                 }
                 catch (Exception ex)
                 {
-                    Plugin.Log.LogError($"[TheQuartermaster] Main thread action error: {ex.Message}");
+                    if (Plugin.DebugLogging) Plugin.Log.LogError($"[TheQuartermaster] Main thread action error: {ex.Message}");
                 }
             }
         }
@@ -185,7 +185,7 @@ namespace TheQuartermaster.Client.UI
             {
                 if (!_qmDetected)
                 {
-                    Plugin.Log.LogInfo($"[TheQuartermaster] Detected Quartermaster trader: {traderName}");
+                    if (Plugin.DebugLogging) Plugin.Log.LogInfo($"[TheQuartermaster] Detected Quartermaster trader: {traderName}");
                     _qmDetected = true;
                 }
                 if (_communityTab == null)
@@ -199,7 +199,7 @@ namespace TheQuartermaster.Client.UI
                     // Re-enable if we were previously not on QM
                     if (!_wasOnQM)
                     {
-                        Plugin.Log.LogInfo("[TheQuartermaster] Re-enabling QM tab (transitioning to QM).");
+                        if (Plugin.DebugLogging) Plugin.Log.LogInfo("[TheQuartermaster] Re-enabling QM tab (transitioning to QM).");
                         if (_communityTabComponent != null)
                         {
                             _communityTabComponent.Interactable = true;
@@ -222,7 +222,7 @@ namespace TheQuartermaster.Client.UI
                 if (_communityTab != null && _communityTab.activeSelf)
                 {
                     if (_wasOnQM)
-                        Plugin.Log.LogInfo($"[TheQuartermaster] Not on QM (current: {traderName ?? "unknown"}) — deselecting and greying out QM tab.");
+                        if (Plugin.DebugLogging) Plugin.Log.LogInfo($"[TheQuartermaster] Not on QM (current: {traderName ?? "unknown"}) — deselecting and greying out QM tab.");
                     if (_communityTabComponent != null)
                     {
                         // Deselect via controller to hide the CommunityScreen
@@ -275,7 +275,7 @@ namespace TheQuartermaster.Client.UI
 
             if (services == null)
             {
-                Plugin.Log.LogWarning("[TheQuartermaster] Could not find 'Services' tab under the trader screen to clone.");
+                if (Plugin.DebugLogging) Plugin.Log.LogWarning("[TheQuartermaster] Could not find 'Services' tab under the trader screen to clone.");
                 return;
             }
 
@@ -284,11 +284,11 @@ namespace TheQuartermaster.Client.UI
                 var tabs = services.transform.parent;
 
                 // Log the parent and siblings for debugging
-                Plugin.Log.LogInfo($"[TheQuartermaster] Tab bar parent: {tabs.name}, childCount={tabs.childCount}");
+                if (Plugin.DebugLogging) Plugin.Log.LogInfo($"[TheQuartermaster] Tab bar parent: {tabs.name}, childCount={tabs.childCount}");
                 for (int i = 0; i < tabs.childCount; i++)
                 {
                     var child = tabs.GetChild(i);
-                    Plugin.Log.LogInfo($"[TheQuartermaster]   Tab[{i}]: {child.name} active={child.gameObject.activeSelf}");
+                    if (Plugin.DebugLogging) Plugin.Log.LogInfo($"[TheQuartermaster]   Tab[{i}]: {child.name} active={child.gameObject.activeSelf}");
                 }
 
                 // Temporarily activate the source so the clone inherits active children
@@ -318,33 +318,33 @@ namespace TheQuartermaster.Client.UI
                 var cloneRT = clone.transform as RectTransform;
                 if (servicesRT != null && cloneRT != null)
                 {
-                    Plugin.Log.LogInfo($"[TheQuartermaster] Services RT: pos={servicesRT.anchoredPosition} size={servicesRT.rect.size} sibling={servicesIndex}");
-                    Plugin.Log.LogInfo($"[TheQuartermaster] Clone RT: pos={cloneRT.anchoredPosition} size={cloneRT.rect.size} sibling={cloneRT.GetSiblingIndex()}");
+                    if (Plugin.DebugLogging) Plugin.Log.LogInfo($"[TheQuartermaster] Services RT: pos={servicesRT.anchoredPosition} size={servicesRT.rect.size} sibling={servicesIndex}");
+                    if (Plugin.DebugLogging) Plugin.Log.LogInfo($"[TheQuartermaster] Clone RT: pos={cloneRT.anchoredPosition} size={cloneRT.rect.size} sibling={cloneRT.GetSiblingIndex()}");
                 }
 
                 // Log all components on the clone for debugging
                 var comps = clone.GetComponents<Component>();
-                Plugin.Log.LogInfo($"[TheQuartermaster] Clone components: {string.Join(", ", comps.Select(c => c.GetType().Name))}");
+                if (Plugin.DebugLogging) Plugin.Log.LogInfo($"[TheQuartermaster] Clone components: {string.Join(", ", comps.Select(c => c.GetType().Name))}");
 
                 // Destroy LocalizedText so it doesn't override our text, then set text on ALL TMP_Text components
                 var locText = clone.GetComponent<LocalizedText>();
                 if (locText != null)
                 {
                     GameObject.Destroy(locText);
-                    Plugin.Log.LogInfo("[TheQuartermaster] Destroyed LocalizedText on CommunityTab.");
+                    if (Plugin.DebugLogging) Plugin.Log.LogInfo("[TheQuartermaster] Destroyed LocalizedText on CommunityTab.");
                 }
                 var allTexts = clone.GetComponentsInChildren<TMP_Text>(true);
                 foreach (var t in allTexts)
                 {
                     t.text = "VOTING";
                 }
-                Plugin.Log.LogInfo($"[TheQuartermaster] Set 'QM' on {allTexts.Length} TMP_Text components.");
+                if (Plugin.DebugLogging) Plugin.Log.LogInfo($"[TheQuartermaster] Set 'QM' on {allTexts.Length} TMP_Text components.");
 
                 // Get the Tab component directly
                 var tab = clone.GetComponent<Tab>();
                 if (tab == null)
                 {
-                    Plugin.Log.LogError("[TheQuartermaster] No Tab component found on clone.");
+                    if (Plugin.DebugLogging) Plugin.Log.LogError("[TheQuartermaster] No Tab component found on clone.");
                     return;
                 }
                 _communityTabComponent = tab;
@@ -362,7 +362,7 @@ namespace TheQuartermaster.Client.UI
                     cg.alpha = 1f;
                     cg.interactable = true;
                     cg.blocksRaycasts = true;
-                    Plugin.Log.LogInfo("[TheQuartermaster] Reset CanvasGroup: alpha=1, interactable=true, blocksRaycasts=true");
+                    if (Plugin.DebugLogging) Plugin.Log.LogInfo("[TheQuartermaster] Reset CanvasGroup: alpha=1, interactable=true, blocksRaycasts=true");
                 }
 
                 // Deselect initially — UpdateVisual(false, false) sets bool_0=false, _uiSelected=false
@@ -398,15 +398,15 @@ namespace TheQuartermaster.Client.UI
                     }
                 }
                 _contentArea = contentArea as RectTransform;
-                Plugin.Log.LogInfo($"[TheQuartermaster] Content area: {(_contentArea?.name ?? "null")}");
+                if (Plugin.DebugLogging) Plugin.Log.LogInfo($"[TheQuartermaster] Content area: {(_contentArea?.name ?? "null")}");
 
                 // Clone the ServicesScreen content panel to use as our screen
                 // Search recursively — it may not be a direct child of screenParent
-                Plugin.Log.LogInfo($"[TheQuartermaster] Searching for ServicesScreen. screenParent={screenParent.name}, childCount={screenParent.childCount}");
+                if (Plugin.DebugLogging) Plugin.Log.LogInfo($"[TheQuartermaster] Searching for ServicesScreen. screenParent={screenParent.name}, childCount={screenParent.childCount}");
                 for (int i = 0; i < screenParent.childCount; i++)
                 {
                     var child = screenParent.GetChild(i);
-                    Plugin.Log.LogInfo($"[TheQuartermaster]   screenParent child[{i}]: {child.name} active={child.gameObject.activeSelf}");
+                    if (Plugin.DebugLogging) Plugin.Log.LogInfo($"[TheQuartermaster]   screenParent child[{i}]: {child.name} active={child.gameObject.activeSelf}");
                 }
 
                 GameObject servicesScreenObj = null;
@@ -422,13 +422,13 @@ namespace TheQuartermaster.Client.UI
                 // If not found, search recursively in the entire trader screen
                 if (servicesScreenObj == null)
                 {
-                    Plugin.Log.LogInfo("[TheQuartermaster] ServicesScreen not a direct child of screenParent, searching recursively...");
+                    if (Plugin.DebugLogging) Plugin.Log.LogInfo("[TheQuartermaster] ServicesScreen not a direct child of screenParent, searching recursively...");
                     foreach (var t in CurrentTraderScreen.GetComponentsInChildren<Transform>(true))
                     {
                         if (t.name == "ServicesScreen")
                         {
                             servicesScreenObj = t.gameObject;
-                            Plugin.Log.LogInfo($"[TheQuartermaster] Found ServicesScreen at path: {GetPath(t)}");
+                            if (Plugin.DebugLogging) Plugin.Log.LogInfo($"[TheQuartermaster] Found ServicesScreen at path: {GetPath(t)}");
                             break;
                         }
                     }
@@ -456,11 +456,11 @@ namespace TheQuartermaster.Client.UI
                     // Create a controller and init the tab so Select/Deselect manages our screen
                     var controller = new CommunityScreenController(screenClone);
                     tab.Init(controller);
-                    Plugin.Log.LogInfo("[TheQuartermaster] Created CommunityScreen and wired up controller.");
+                    if (Plugin.DebugLogging) Plugin.Log.LogInfo("[TheQuartermaster] Created CommunityScreen and wired up controller.");
                 }
                 else
                 {
-                    Plugin.Log.LogWarning("[TheQuartermaster] Could not find ServicesScreen to clone for content panel.");
+                    if (Plugin.DebugLogging) Plugin.Log.LogWarning("[TheQuartermaster] Could not find ServicesScreen to clone for content panel.");
                 }
                 _siblingTabs.Clear();
                 foreach (Transform sibling in tabs)
@@ -475,12 +475,12 @@ namespace TheQuartermaster.Client.UI
                         siblingTab.OnSelectionChanged += OnSiblingTabSelectionChanged;
                     }
                 }
-                Plugin.Log.LogInfo($"[TheQuartermaster] Subscribed to {_siblingTabs.Count} sibling tabs.");
+                if (Plugin.DebugLogging) Plugin.Log.LogInfo($"[TheQuartermaster] Subscribed to {_siblingTabs.Count} sibling tabs.");
 
                 // Subscribe to our own tab's OnSelectionChanged — the Tab handles its own clicks via IPointerClickHandler.
                 // HandlePointerClick fires OnSelectionChanged(this, !isSelectedNow).
                 _communityTabComponent.OnSelectionChanged += OnCommunityTabSelectionChanged;
-                Plugin.Log.LogInfo("[TheQuartermaster] Subscribed to Community tab OnSelectionChanged.");
+                if (Plugin.DebugLogging) Plugin.Log.LogInfo("[TheQuartermaster] Subscribed to Community tab OnSelectionChanged.");
 
                 // Force layout rebuild so the tab appears in the correct position
                 var tabsRT = tabs as RectTransform;
@@ -494,11 +494,11 @@ namespace TheQuartermaster.Client.UI
 
                 _communityTab = clone;
                 _communityTabOriginalSiblingIndex = clone.transform.GetSiblingIndex();
-                Plugin.Log.LogInfo($"[TheQuartermaster] Injected Community tab at sibling index {clone.transform.GetSiblingIndex()} (Services at {servicesIndex}).");
+                if (Plugin.DebugLogging) Plugin.Log.LogInfo($"[TheQuartermaster] Injected Community tab at sibling index {clone.transform.GetSiblingIndex()} (Services at {servicesIndex}).");
             }
             catch (Exception ex)
             {
-                Plugin.Log.LogError($"[TheQuartermaster] Failed to inject Community tab: {ex.Message}");
+                if (Plugin.DebugLogging) Plugin.Log.LogError($"[TheQuartermaster] Failed to inject Community tab: {ex.Message}");
             }
         }
 
@@ -509,14 +509,14 @@ namespace TheQuartermaster.Client.UI
             if (rt != null)
             {
                 LayoutRebuilder.ForceRebuildLayoutImmediate(rt);
-                Plugin.Log.LogInfo($"[TheQuartermaster] Layout rebuilt next frame for {parent.name}, childCount={parent.childCount}");
+                if (Plugin.DebugLogging) Plugin.Log.LogInfo($"[TheQuartermaster] Layout rebuilt next frame for {parent.name}, childCount={parent.childCount}");
 
                 // Log all tab positions after rebuild
                 for (int i = 0; i < parent.childCount; i++)
                 {
                     var child = parent.GetChild(i) as RectTransform;
                     if (child != null)
-                        Plugin.Log.LogInfo($"[TheQuartermaster]   After rebuild Tab[{i}]: {child.name} pos={child.anchoredPosition} size={child.rect.size}");
+                        if (Plugin.DebugLogging) Plugin.Log.LogInfo($"[TheQuartermaster]   After rebuild Tab[{i}]: {child.name} pos={child.anchoredPosition} size={child.rect.size}");
                 }
 
                 // Manually position the clone to the right of Services if layout didn't do it correctly
@@ -554,7 +554,7 @@ namespace TheQuartermaster.Client.UI
                         Vector2 newPos = cloneRT.anchoredPosition;
                         newPos.x = servicesX + step;
                         cloneRT.anchoredPosition = newPos;
-                        Plugin.Log.LogInfo($"[TheQuartermaster] Manually repositioned CommunityTab from x={cloneX} to x={newPos.x} (Services at x={servicesX}, step={step})");
+                        if (Plugin.DebugLogging) Plugin.Log.LogInfo($"[TheQuartermaster] Manually repositioned CommunityTab from x={cloneX} to x={newPos.x} (Services at x={servicesX}, step={step})");
                     }
                 }
             }
@@ -562,12 +562,12 @@ namespace TheQuartermaster.Client.UI
 
         private void OnCommunityTabSelectionChanged(Tab tab, bool selected)
         {
-            Plugin.Log.LogInfo($"[TheQuartermaster] OnCommunityTabSelectionChanged: selected={selected}");
+            if (Plugin.DebugLogging) Plugin.Log.LogInfo($"[TheQuartermaster] OnCommunityTabSelectionChanged: selected={selected}");
             if (selected)
             {
                 // Select with sendCallback=true so Controller.Show() activates our CommunityScreen
                 _communityTabComponent.Select(true, false);
-                Plugin.Log.LogInfo($"[TheQuartermaster] CommunityScreen active={(_communityScreen != null && _communityScreen.activeSelf)}");
+                if (Plugin.DebugLogging) Plugin.Log.LogInfo($"[TheQuartermaster] CommunityScreen active={(_communityScreen != null && _communityScreen.activeSelf)}");
 
                 // Deselect all sibling tabs (hides their content panels via Controller.TryHide)
                 foreach (var siblingTab in _siblingTabs)
@@ -593,7 +593,7 @@ namespace TheQuartermaster.Client.UI
         {
             if (selected && _communityTabComponent != null)
             {
-                Plugin.Log.LogInfo($"[TheQuartermaster] Sibling tab {selectedTab.name} selected, deselecting QM tab.");
+                if (Plugin.DebugLogging) Plugin.Log.LogInfo($"[TheQuartermaster] Sibling tab {selectedTab.name} selected, deselecting QM tab.");
 
                 // A sibling tab was selected — deselect Community (Controller.TryHide deactivates our screen)
                 _communityTabComponent.UpdateVisual(false, false);
@@ -621,7 +621,7 @@ namespace TheQuartermaster.Client.UI
             var services = FindChild(screenRoot.transform, "Services");
             if (services == null)
             {
-                Plugin.Log.LogError("[TheQuartermaster] Could not find 'Services' child in cloned screen.");
+                if (Plugin.DebugLogging) Plugin.Log.LogError("[TheQuartermaster] Could not find 'Services' child in cloned screen.");
                 return;
             }
 
@@ -639,27 +639,27 @@ namespace TheQuartermaster.Client.UI
                         if (dealButton != null)
                         {
                             _eftButtonTemplate = dealButton.gameObject;
-                            Plugin.Log.LogInfo("[TheQuartermaster] Stored DealButton as EFT button template.");
-                            Plugin.Log.LogInfo("[TheQuartermaster] DealButton hierarchy:");
+                            if (Plugin.DebugLogging) Plugin.Log.LogInfo("[TheQuartermaster] Stored DealButton as EFT button template.");
+                            if (Plugin.DebugLogging) Plugin.Log.LogInfo("[TheQuartermaster] DealButton hierarchy:");
                             LogHierarchy(dealButton, 0);
                         }
                     }
                 }
                 arena.gameObject.SetActive(false);
-                Plugin.Log.LogInfo("[TheQuartermaster] Hidden ArenaEftItemTransferWindow.");
+                if (Plugin.DebugLogging) Plugin.Log.LogInfo("[TheQuartermaster] Hidden ArenaEftItemTransferWindow.");
             }
 
             // Find Ragman > ServicesList
             var ragman = FindChild(services, "Ragman");
             if (ragman == null)
             {
-                Plugin.Log.LogError("[TheQuartermaster] Could not find 'Ragman' child.");
+                if (Plugin.DebugLogging) Plugin.Log.LogError("[TheQuartermaster] Could not find 'Ragman' child.");
                 return;
             }
 
             // Activate Ragman (parent of ServicesList) — it's inactive by default in the cloned screen
             ragman.gameObject.SetActive(true);
-            Plugin.Log.LogInfo("[TheQuartermaster] Activated Ragman container.");
+            if (Plugin.DebugLogging) Plugin.Log.LogInfo("[TheQuartermaster] Activated Ragman container.");
 
             // Repurpose TacticalClothingView as the right-side quest details panel
             var clothingView = FindChild(ragman, "TacticalClothingView");
@@ -694,13 +694,13 @@ namespace TheQuartermaster.Client.UI
                 _detailsRows.pivot = new Vector2(0.5f, 1f);
                 _detailsRows.offsetMax = new Vector2(0f, -85f);
                 _detailsRows.offsetMin = new Vector2(0f, 0f);
-                Plugin.Log.LogInfo("[TheQuartermaster] Prepared right-side details panel.");
+                if (Plugin.DebugLogging) Plugin.Log.LogInfo("[TheQuartermaster] Prepared right-side details panel.");
             }
 
             var servicesList = FindChild(ragman, "ServicesList");
             if (servicesList == null)
             {
-                Plugin.Log.LogError("[TheQuartermaster] Could not find 'ServicesList'.");
+                if (Plugin.DebugLogging) Plugin.Log.LogError("[TheQuartermaster] Could not find 'ServicesList'.");
                 return;
             }
 
@@ -717,7 +717,7 @@ namespace TheQuartermaster.Client.UI
                     // Push the list down a bit so it doesn't overlap the header
                     listRT.offsetMin = new Vector2(listRT.offsetMin.x, listRT.offsetMin.y);
                     listRT.offsetMax = new Vector2(listRT.offsetMax.x, listRT.offsetMax.y - 40f);
-                    Plugin.Log.LogInfo("[TheQuartermaster] Adjusted List position to avoid header overlap.");
+                    if (Plugin.DebugLogging) Plugin.Log.LogInfo("[TheQuartermaster] Adjusted List position to avoid header overlap.");
                 }
             }
 
@@ -734,7 +734,7 @@ namespace TheQuartermaster.Client.UI
                     {
                         _statusText = titleText;
                         _statusText.text = "Community Contracts";
-                        Plugin.Log.LogInfo("[TheQuartermaster] Repurposed ServicesList Header Title as status text.");
+                        if (Plugin.DebugLogging) Plugin.Log.LogInfo("[TheQuartermaster] Repurposed ServicesList Header Title as status text.");
                     }
 
                     if (_rightSideText != null && _statusText != null)
@@ -761,7 +761,7 @@ namespace TheQuartermaster.Client.UI
                         btn.onClick.RemoveAllListeners();
                         btn.onClick.AddListener(OnRefreshButtonClicked);
                     }
-                    Plugin.Log.LogInfo("[TheQuartermaster] Added Refresh and Submit buttons to header.");
+                    if (Plugin.DebugLogging) Plugin.Log.LogInfo("[TheQuartermaster] Added Refresh and Submit buttons to header.");
                 }
             }
 
@@ -783,9 +783,9 @@ namespace TheQuartermaster.Client.UI
                         {
                             vlg.padding = new RectOffset(15, 15, 5, 5);
                             vlg.spacing = 5;
-                            Plugin.Log.LogInfo("[TheQuartermaster] Added padding to submission list container.");
+                            if (Plugin.DebugLogging) Plugin.Log.LogInfo("[TheQuartermaster] Added padding to submission list container.");
                         }
-                        Plugin.Log.LogInfo($"[TheQuartermaster] Repurposed scroll content '{_submissionListContainer.name}' as submission list.");
+                        if (Plugin.DebugLogging) Plugin.Log.LogInfo($"[TheQuartermaster] Repurposed scroll content '{_submissionListContainer.name}' as submission list.");
                     }
 
                     // Find ServiceItem template in Content
@@ -796,13 +796,13 @@ namespace TheQuartermaster.Client.UI
                         {
                             _serviceItemTemplate = serviceItem.gameObject;
                             _serviceItemTemplate.SetActive(false);
-                            Plugin.Log.LogInfo("[TheQuartermaster] Found ServiceItem template, stored and hidden.");
+                            if (Plugin.DebugLogging) Plugin.Log.LogInfo("[TheQuartermaster] Found ServiceItem template, stored and hidden.");
                         }
                     }
                 }
             }
 
-            Plugin.Log.LogInfo("[TheQuartermaster] Repurposed existing ServicesScreen UI successfully.");
+            if (Plugin.DebugLogging) Plugin.Log.LogInfo("[TheQuartermaster] Repurposed existing ServicesScreen UI successfully.");
         }
 
         private static Transform FindChild(Transform parent, string name)
@@ -821,7 +821,7 @@ namespace TheQuartermaster.Client.UI
             var indent = new string(' ', depth * 2);
             var components = t.GetComponents<Component>();
             var compNames = components.Select(c => c.GetType().Name);
-            Plugin.Log.LogInfo($"[TheQuartermaster] {indent}{t.name} [{string.Join(", ", compNames)}] active={t.gameObject.activeSelf}");
+            if (Plugin.DebugLogging) Plugin.Log.LogInfo($"[TheQuartermaster] {indent}{t.name} [{string.Join(", ", compNames)}] active={t.gameObject.activeSelf}");
             for (int i = 0; i < t.childCount; i++)
                 LogHierarchy(t.GetChild(i), depth + 1);
         }
@@ -884,7 +884,7 @@ namespace TheQuartermaster.Client.UI
             // Clone the ServiceItem template
             if (_serviceItemTemplate == null)
             {
-                Plugin.Log.LogWarning("[TheQuartermaster] No ServiceItem template, cannot create submission row.");
+                if (Plugin.DebugLogging) Plugin.Log.LogWarning("[TheQuartermaster] No ServiceItem template, cannot create submission row.");
                 return;
             }
 
@@ -1054,7 +1054,7 @@ namespace TheQuartermaster.Client.UI
                             ShowSubmissionDetails(_currentSubmission);
                         });
                     });
-                    Plugin.Log.LogInfo($"[TheQuartermaster] Upvoted submission {sid}");
+                    if (Plugin.DebugLogging) Plugin.Log.LogInfo($"[TheQuartermaster] Upvoted submission {sid}");
                 });
 
                 // Downvote button (EFT style, next to upvote)
@@ -1079,7 +1079,7 @@ namespace TheQuartermaster.Client.UI
                             ShowSubmissionDetails(_currentSubmission);
                         });
                     });
-                    Plugin.Log.LogInfo($"[TheQuartermaster] Downvoted submission {sid}");
+                    if (Plugin.DebugLogging) Plugin.Log.LogInfo($"[TheQuartermaster] Downvoted submission {sid}");
                 });
 
                 // Link Discord / Unlink button (EFT style, below vote buttons)
@@ -1092,7 +1092,7 @@ namespace TheQuartermaster.Client.UI
                     {
                         CommunityApiClient.Unlink();
                         ShowSubmissionDetails(_currentSubmission);
-                        Plugin.Log.LogInfo("[TheQuartermaster] Unlinked Discord account.");
+                        if (Plugin.DebugLogging) Plugin.Log.LogInfo("[TheQuartermaster] Unlinked Discord account.");
                     });
                     _linkButtonText = unlinkBtn.GetComponentInChildren<TextMeshProUGUI>(true);
                 }
@@ -1105,7 +1105,7 @@ namespace TheQuartermaster.Client.UI
                     _linkButtonText = linkBtn.GetComponentInChildren<TextMeshProUGUI>(true);
                 }
 
-                Plugin.Log.LogInfo("[TheQuartermaster] Added Back, Upvote, Downvote, and Link/Unlink buttons to detail view.");
+                if (Plugin.DebugLogging) Plugin.Log.LogInfo("[TheQuartermaster] Added Back, Upvote, Downvote, and Link/Unlink buttons to detail view.");
             }
         }
 
@@ -1285,7 +1285,7 @@ namespace TheQuartermaster.Client.UI
             }
             catch (Exception ex)
             {
-                Plugin.Log.LogWarning($"[TheQuartermaster] Failed to load mod icon {fileName}: {ex.Message}");
+                if (Plugin.DebugLogging) Plugin.Log.LogWarning($"[TheQuartermaster] Failed to load mod icon {fileName}: {ex.Message}");
                 return null;
             }
         }
@@ -1504,7 +1504,7 @@ namespace TheQuartermaster.Client.UI
             }
             else
             {
-                Plugin.Log.LogWarning($"[TheQuartermaster] No clickable component found on '{btnObj.name}'.");
+                if (Plugin.DebugLogging) Plugin.Log.LogWarning($"[TheQuartermaster] No clickable component found on '{btnObj.name}'.");
             }
         }
 
@@ -1533,7 +1533,7 @@ namespace TheQuartermaster.Client.UI
             }
             else
             {
-                Plugin.Log.LogWarning($"[TheQuartermaster] No DefaultUIButton on {name}.");
+                if (Plugin.DebugLogging) Plugin.Log.LogWarning($"[TheQuartermaster] No DefaultUIButton on {name}.");
             }
 
             // Make sure every TMP label in the button states shows our label (fixes hover text showing old key paths)
@@ -1555,7 +1555,7 @@ namespace TheQuartermaster.Client.UI
                 if (!keep.Contains(child.name))
                 {
                     child.gameObject.SetActive(false);
-                    Plugin.Log.LogInfo($"[TheQuartermaster] Hidden extra child '{child.name}' on {name}.");
+                    if (Plugin.DebugLogging) Plugin.Log.LogInfo($"[TheQuartermaster] Hidden extra child '{child.name}' on {name}.");
                 }
             }
 
@@ -1565,7 +1565,7 @@ namespace TheQuartermaster.Client.UI
                 HideNamedChildren(state, new[] { "TooltipTarget", "Pattern", "Icon", "SizeLabel" });
             }
 
-            Plugin.Log.LogInfo($"[TheQuartermaster] Created EFT button '{name}' with label '{label}'.");
+            if (Plugin.DebugLogging) Plugin.Log.LogInfo($"[TheQuartermaster] Created EFT button '{name}' with label '{label}'.");
             return btn;
         }
 

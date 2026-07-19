@@ -115,7 +115,7 @@ public class ScavengedTagPatch : ModulePatch
         }
         catch (Exception ex)
         {
-            Plugin.Log.LogError($"[TheQuartermaster] ScavengedTagPatch error: {ex}");
+            if (Plugin.DebugLogging) Plugin.Log.LogError($"[TheQuartermaster] ScavengedTagPatch error: {ex}");
         }
     }
 
@@ -140,14 +140,14 @@ public class ScavengedTagPatch : ModulePatch
             var staticIcons = EFTHardSettings.Instance?.StaticIcons;
             if (staticIcons == null)
             {
-                Plugin.Log.LogWarning("[TheQuartermaster] StaticIcons not available, skipping skull icon");
+                if (Plugin.DebugLogging) Plugin.Log.LogWarning("[TheQuartermaster] StaticIcons not available, skipping skull icon");
                 return;
             }
 
             _skullSprite = staticIcons.QuestTypeSprites[RawQuestClass.EQuestType.Elimination];
             if (_skullSprite == null)
             {
-                Plugin.Log.LogWarning("[TheQuartermaster] Elimination skull sprite not found in StaticIcons");
+                if (Plugin.DebugLogging) Plugin.Log.LogWarning("[TheQuartermaster] Elimination skull sprite not found in StaticIcons");
                 return;
             }
         }
