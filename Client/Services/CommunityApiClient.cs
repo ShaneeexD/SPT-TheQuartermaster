@@ -20,6 +20,7 @@ namespace TheQuartermaster.Client.Services
         private static ConfigEntry<string> _cacheUrl;
         private static ConfigEntry<string> _apiBaseUrl;
         private static string _storagePath;
+        private static string _localSubmissionsPath = string.Empty;
         private static Timer _pollTimer;
         private static Timer _tokenRefreshTimer;
 
@@ -31,6 +32,7 @@ namespace TheQuartermaster.Client.Services
         public static long TokenExpiresAt { get; private set; } = 0;
         public static string LastError { get; set; } = string.Empty;
         public static bool IsLinked => !string.IsNullOrWhiteSpace(IdToken);
+        public static string LocalSubmissionsModPath { get; private set; } = string.Empty;
 
         public static List<JObject> Submissions { get; } = new List<JObject>();
         public static JObject SelectedSubmission { get; set; }
@@ -44,8 +46,30 @@ namespace TheQuartermaster.Client.Services
             _apiBaseUrl = config.Bind("Community", "ApiBaseUrl", "https://serenity-workshop.netlify.app/.netlify/functions", "Base URL for the community API");
 
             _storagePath = Path.Combine(pluginFolder, "TheQuartermaster", "community_auth.json");
+            _localSubmissionsPath = ResolveLocalSubmissionsPath(pluginFolder);
+            LocalSubmissionsModPath = Path.GetDirectoryName(_localSubmissionsPath) ?? string.Empty;
             Directory.CreateDirectory(Path.GetDirectoryName(_storagePath) ?? string.Empty);
             LoadAuth();
+        }
+
+        private static string ResolveLocalSubmissionsPath(string pluginFolder)
+        {
+            try
+            {
+                var dir = new DirectoryInfo(pluginFolder);
+                while (dir != null && !string.Equals(dir.Name, "BepInEx", StringComparison.OrdinalIgnoreCase))
+                {
+                    dir = dir.Parent;
+                }
+
+                var gameRoot = dir?.Parent?.FullName;
+                if (!string.IsNullOrWhiteSpace(gameRoot))
+                {
+                    return Path.Combine(gameRoot, "user", "mods", "TheQuartermaster", "client_submissions.json");
+                }
+            }
+            catch { }
+            return string.Empty;
         }
 
         private static void LoadAuth()
@@ -353,6 +377,31 @@ namespace TheQuartermaster.Client.Services
 
         public static void LoadSubmissions()
         {
+            var localPath = _localSubmissionsPath;
+            if (!string.IsNullOrWhiteSpace(localPath) && File.Exists(localPath))
+            {
+                Task.Run(() =>
+                {
+                    try
+                    {
+                        var json = File.ReadAllText(localPath);
+                        var doc = JObject.Parse(json);
+                        var items = doc["submissions"] as JArray ?? new JArray();
+                        Submissions.Clear();
+                        foreach (var item in items.OfType<JObject>())
+                            Submissions.Add(item);
+                        LastError = string.Empty;
+                        Plugin.Log.LogInfo($"[TheQuartermaster] Loaded {Submissions.Count} pending submissions from local server file.");
+                    }
+                    catch (Exception ex)
+                    {
+                        SetError($"Local submissions load error: {ex.Message}");
+                    }
+                    OnStateChanged?.Invoke();
+                });
+                return;
+            }
+
             var url = _cacheUrl?.Value?.Trim() ?? string.Empty;
             if (string.IsNullOrWhiteSpace(url))
             {

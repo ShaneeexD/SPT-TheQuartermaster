@@ -35,6 +35,11 @@ namespace TheQuartermaster.Client.UI
         private GameObject _communityScreen;
         private Text _statusText;
         private Text _rightSideText;
+        private RectTransform _detailsRows;
+        private readonly List<GameObject> _detailRows = new List<GameObject>();
+        private float _detailRowOffset;
+        private static List<(string name, Sprite sprite)> _staticIconCache;
+        private static readonly Dictionary<string, Sprite> _modIconCache = new Dictionary<string, Sprite>();
         private Transform _submissionListContainer;
         private GameObject _listView;
         private GameObject _detailView;
@@ -664,20 +669,31 @@ namespace TheQuartermaster.Client.UI
                 for (int i = 0; i < clothingView.childCount; i++)
                     clothingView.GetChild(i).gameObject.SetActive(false);
 
-                var detailsGO = new GameObject("CommunityDetails", typeof(RectTransform), typeof(Text));
-                detailsGO.transform.SetParent(clothingView, false);
-                var detailsRT = detailsGO.GetComponent<RectTransform>();
-                detailsRT.anchorMin = new Vector2(0.02f, 0.02f);
-                detailsRT.anchorMax = new Vector2(0.98f, 0.98f);
-                detailsRT.offsetMin = Vector2.zero;
-                detailsRT.offsetMax = Vector2.zero;
-                _rightSideText = detailsGO.GetComponent<Text>();
+                var headerGO = new GameObject("CommunityDetailsHeader", typeof(RectTransform), typeof(Text));
+                headerGO.transform.SetParent(clothingView, false);
+                var headerRT = headerGO.GetComponent<RectTransform>();
+                headerRT.anchorMin = new Vector2(0.02f, 1f);
+                headerRT.anchorMax = new Vector2(0.98f, 1f);
+                headerRT.pivot = new Vector2(0.5f, 1f);
+                headerRT.offsetMax = new Vector2(0f, 0f);
+                headerRT.offsetMin = new Vector2(0f, -80f);
+                _rightSideText = headerGO.GetComponent<Text>();
                 _rightSideText.color = new Color32(220, 220, 220, 255);
                 _rightSideText.fontSize = 18;
                 _rightSideText.alignment = TextAnchor.UpperLeft;
                 _rightSideText.verticalOverflow = VerticalWrapMode.Overflow;
                 _rightSideText.horizontalOverflow = HorizontalWrapMode.Wrap;
+                _rightSideText.supportRichText = true;
                 _rightSideText.text = "Select a community contract to view details.";
+
+                var rowsGO = new GameObject("CommunityDetailsRows", typeof(RectTransform));
+                rowsGO.transform.SetParent(clothingView, false);
+                _detailsRows = rowsGO.GetComponent<RectTransform>();
+                _detailsRows.anchorMin = new Vector2(0.02f, 0.02f);
+                _detailsRows.anchorMax = new Vector2(0.98f, 1f);
+                _detailsRows.pivot = new Vector2(0.5f, 1f);
+                _detailsRows.offsetMax = new Vector2(0f, -85f);
+                _detailsRows.offsetMin = new Vector2(0f, 0f);
                 Plugin.Log.LogInfo("[TheQuartermaster] Prepared right-side details panel.");
             }
 
@@ -728,6 +744,15 @@ namespace TheQuartermaster.Client.UI
                 // Add Refresh button to the right side of the header (plain simple button that fits)
                 if (header is RectTransform headerRT)
                 {
+                    var submitBtn = CreateSimpleButton(header, "SubmitButton", "Submit your own",
+                        new Vector2(-105, 0), new Vector2(130, 28), new Vector2(1, 0.5f));
+                    var submitBtnComp = submitBtn.GetComponent<Button>();
+                    if (submitBtnComp != null)
+                    {
+                        submitBtnComp.onClick.RemoveAllListeners();
+                        submitBtnComp.onClick.AddListener(() => Application.OpenURL("https://serenity-workshop.netlify.app/contracts"));
+                    }
+
                     var refreshBtn = CreateSimpleButton(header, "RefreshButton", "Refresh",
                         new Vector2(-5, 0), new Vector2(90, 28), new Vector2(1, 0.5f));
                     var btn = refreshBtn.GetComponent<Button>();
@@ -736,7 +761,7 @@ namespace TheQuartermaster.Client.UI
                         btn.onClick.RemoveAllListeners();
                         btn.onClick.AddListener(OnRefreshButtonClicked);
                     }
-                    Plugin.Log.LogInfo("[TheQuartermaster] Added Refresh button to header.");
+                    Plugin.Log.LogInfo("[TheQuartermaster] Added Refresh and Submit buttons to header.");
                 }
             }
 
@@ -819,6 +844,8 @@ namespace TheQuartermaster.Client.UI
 
             if (_rightSideText != null)
                 _rightSideText.text = "Select a community contract to view details.";
+
+            ClearDetailRows();
 
             // Clear existing rows (keep the template)
             for (int i = _submissionListContainer.childCount - 1; i >= 0; i--)
@@ -910,22 +937,85 @@ namespace TheQuartermaster.Client.UI
             // Populate the right-side details panel
             if (_rightSideText != null)
             {
-                var objectives = submission["objectives"] as JArray;
-                var objText = "";
-                if (objectives != null && objectives.Count > 0)
+                _rightSideText.text = $"Selected: {title}\nby {author}\nSupport: {ratio:F0}%  Up: {upvotes}  Down: {downvotes}";
+                var headerRT = _rightSideText.GetComponent<RectTransform>();
+                if (headerRT != null)
                 {
-                    objText = "\n\nObjectives:";
-                    foreach (var obj in objectives.OfType<JObject>())
+                    float headerHeight = Mathf.Max(80f, _rightSideText.preferredHeight + 10f);
+                    headerRT.offsetMin = new Vector2(headerRT.offsetMin.x, -headerHeight);
+                    if (_detailsRows != null)
+                        _detailsRows.offsetMax = new Vector2(_detailsRows.offsetMax.x, -(headerHeight + 5f));
+                }
+            }
+
+            if (_detailsRows != null)
+            {
+                ClearDetailRows();
+
+                if (!string.IsNullOrWhiteSpace(description))
+                    AddDetailRow(null, description, 16);
+
+                var recurrence = submission["recurrence_type"]?.ToString();
+                if (!string.IsNullOrWhiteSpace(recurrence))
+                    AddDetailRow(null, $"Recurrence: {FormatRecurrenceType(recurrence)}", 16);
+
+                var displayObjectives = submission["display_objectives"] as JArray;
+                var objectives = submission["objectives"] as JArray;
+                if ((displayObjectives != null && displayObjectives.Count > 0) || (objectives != null && objectives.Count > 0))
+                {
+                    AddDetailRow(null, "Objectives", 18, true);
+                    if (displayObjectives != null && displayObjectives.Count > 0)
                     {
-                        var desc = obj["description"]?.ToString() ?? obj.ToString();
-                        objText += $"\n- {desc}";
+                        for (int i = 0; i < displayObjectives.Count; i++)
+                        {
+                            var line = displayObjectives[i];
+                            string text = line?.ToString() ?? "";
+                            string iconKey = "";
+                            if (line is JObject obj)
+                            {
+                                text = obj["text"]?.ToString() ?? text;
+                                iconKey = obj["icon"]?.ToString() ?? "";
+                            }
+                            AddDetailRow(GetObjectiveIconOrFallback(iconKey), text, 16);
+                        }
+                    }
+                    else if (objectives != null)
+                    {
+                        foreach (var obj in objectives.OfType<JObject>())
+                        {
+                            AddDetailRow(GetObjectiveIconOrFallback(obj["type"]?.ToString() ?? ""), GetObjectiveFallbackText(obj), 16);
+                        }
                     }
                 }
 
-                var rewards = submission["rewards"];
-                var rewardText = FormatRewards(rewards);
-
-                _rightSideText.text = $"{title}\nby {author}  |  Support: {ratio:F0}%  Up: {upvotes}  Down: {downvotes}\n\n{description}{objText}{rewardText}";
+                var displayRewards = submission["display_rewards"] as JArray;
+                if (displayRewards != null && displayRewards.Count > 0)
+                {
+                    AddDetailRow(null, "Rewards", 18, true);
+                    foreach (var line in displayRewards)
+                    {
+                        string text = line?.ToString() ?? "";
+                        string iconKey = "";
+                        if (line is JObject obj)
+                        {
+                            text = obj["text"]?.ToString() ?? text;
+                            iconKey = obj["icon"]?.ToString() ?? "";
+                        }
+                        AddDetailRow(null, text, 16);
+                    }
+                }
+                else
+                {
+                    var rewardText = FormatRewards(submission["rewards"]);
+                    if (!string.IsNullOrWhiteSpace(rewardText))
+                    {
+                        AddDetailRow(null, "Rewards", 18, true);
+                        foreach (var rewardLine in rewardText.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                        {
+                            AddDetailRow(null, rewardLine.Trim(), 16);
+                        }
+                    }
+                }
             }
 
             // Replace list with action buttons — all EFT style for consistency
@@ -1027,6 +1117,372 @@ namespace TheQuartermaster.Client.UI
                 submission["downvotes"] = result["downvotes"];
             if (result["approval_ratio"] != null)
                 submission["approval_ratio"] = result["approval_ratio"];
+        }
+
+        private void ClearDetailRows()
+        {
+            foreach (var row in _detailRows)
+            {
+                if (row != null)
+                    Destroy(row);
+            }
+            _detailRows.Clear();
+            _detailRowOffset = 0f;
+        }
+
+        private void AddDetailRow(Sprite icon, string text, int fontSize = 16, bool header = false)
+        {
+            if (_detailsRows == null || string.IsNullOrWhiteSpace(text))
+                return;
+
+            var rowRT = new GameObject("DetailRow", typeof(RectTransform)).GetComponent<RectTransform>();
+            rowRT.SetParent(_detailsRows, false);
+            rowRT.anchorMin = new Vector2(0, 1);
+            rowRT.anchorMax = new Vector2(1, 1);
+            rowRT.pivot = new Vector2(0, 1);
+            _detailRows.Add(rowRT.gameObject);
+
+            float iconSize = 28f;
+            float leftPad = icon != null ? 36f : 0f;
+
+            var labelGO = new GameObject("Label", typeof(RectTransform));
+            var labelRT = labelGO.GetComponent<RectTransform>();
+            labelRT.SetParent(rowRT, false);
+            labelRT.anchorMin = new Vector2(0, 1);
+            labelRT.anchorMax = new Vector2(1, 1);
+            labelRT.pivot = new Vector2(0, 1);
+            labelRT.offsetMax = new Vector2(0f, 0f);
+            labelRT.offsetMin = new Vector2(leftPad, -1000f);
+
+            var label = labelGO.AddComponent<Text>();
+            label.font = _rightSideText?.font;
+            label.fontSize = fontSize;
+            label.color = header ? new Color32(255, 220, 120, 255) : _rightSideText?.color ?? new Color32(220, 220, 220, 255);
+            label.alignment = TextAnchor.UpperLeft;
+            label.horizontalOverflow = HorizontalWrapMode.Wrap;
+            label.verticalOverflow = VerticalWrapMode.Overflow;
+            label.supportRichText = true;
+            label.text = header ? $"<b>{text}</b>" : text;
+
+            float availWidth = _detailsRows.rect.width - leftPad - 8f;
+            if (availWidth < 100f)
+                availWidth = 400f;
+
+            var generator = new TextGenerator();
+            var settings = label.GetGenerationSettings(new Vector2(availWidth, 0f));
+            float textHeight = generator.GetPreferredHeight(label.text, settings);
+            float rowHeight = Mathf.Max(icon != null ? iconSize + 4f : 20f, textHeight + 8f);
+
+            if (icon != null)
+            {
+                var iconGO = new GameObject("Icon", typeof(RectTransform));
+                var iconRT = iconGO.GetComponent<RectTransform>();
+                iconRT.SetParent(rowRT, false);
+                iconRT.anchorMin = new Vector2(0, 1);
+                iconRT.anchorMax = new Vector2(0, 1);
+                iconRT.pivot = new Vector2(0, 1);
+                iconRT.offsetMin = new Vector2(0f, -iconSize);
+                iconRT.offsetMax = new Vector2(iconSize, 0f);
+                var img = iconGO.AddComponent<Image>();
+                img.sprite = icon;
+                img.preserveAspect = true;
+                img.color = Color.white;
+            }
+
+            rowRT.offsetMax = new Vector2(0f, -_detailRowOffset);
+            rowRT.offsetMin = new Vector2(0f, -_detailRowOffset - rowHeight);
+            labelRT.offsetMin = new Vector2(leftPad, -rowHeight);
+
+            _detailRowOffset += rowHeight + 4f;
+        }
+
+        private static Sprite GetObjectiveIconOrFallback(string iconKey)
+        {
+            return GetObjectiveIconSprite(iconKey) ?? GetStaticIconFallback(iconKey) ?? LoadModSprite("quest.png");
+        }
+
+        private static Sprite GetRewardIconOrFallback(string iconKey)
+        {
+            return GetRewardIconSprite(iconKey) ?? LoadModSprite("trader.png");
+        }
+
+        private static string FormatRecurrenceType(string raw)
+        {
+            return (raw?.ToLowerInvariant()) switch
+            {
+                "daily" => "Daily",
+                "weekly" => "Weekly",
+                "weekend" => "Weekend",
+                "one_time" => "One Time",
+                _ => raw ?? "Unknown"
+            };
+        }
+
+        private static string GetObjectiveFallbackText(JObject obj)
+        {
+            var desc = obj["description"]?.ToString()?.Trim();
+            if (!string.IsNullOrWhiteSpace(desc))
+                return desc;
+
+            var type = obj["type"]?.ToString()?.Trim() ?? "Objective";
+            var count = obj["count"]?.ToObject<int>() ?? 1;
+            var target = obj["target_tpl"]?.ToString() ?? "";
+            var map = obj["target_map"]?.ToString() ?? "";
+            var zone = obj["target_zone"]?.ToString() ?? "";
+            var fir = obj["required_in_raid"]?.ToObject<bool>() ?? false;
+
+            var locationSuffix = map != "" ? $" on {map}" : "";
+            var zoneSuffix = zone != "" ? $" in {zone}" : "";
+            var firText = fir ? " (Found in Raid)" : "";
+
+            switch (type)
+            {
+                case "HandOverItem":
+                case "HandOverFirItem":
+                    return $"Hand over {count}x item{firText}{zoneSuffix}";
+                case "PlantItem":
+                    return $"Plant {count}x item{zoneSuffix}";
+                case "KillScavs":
+                    return $"Eliminate {count} Scav{(count == 1 ? "" : "s")}{locationSuffix}";
+                case "KillPmcs":
+                    return $"Eliminate {count} PMC{(count == 1 ? "" : "s")}{locationSuffix}";
+                case "KillBoss":
+                    return $"Eliminate {count} boss{(count == 1 ? "" : "es")}{locationSuffix}";
+                case "SurviveMap":
+                    return $"Survive {count} raid{(count == 1 ? "" : "s")} on {map}";
+                case "ExtractMap":
+                    return $"Extract from {map} {count} time{(count == 1 ? "" : "s")}";
+                case "VisitPlace":
+                    return $"Visit {map}{zoneSuffix}";
+                case "FindItem":
+                    return $"Find {count}x item{firText}{zoneSuffix}";
+                default:
+                    return $"{type}: {count}x {target}{locationSuffix}{firText}";
+            }
+        }
+
+        private static Sprite LoadModSprite(string fileName)
+        {
+            if (_modIconCache.TryGetValue(fileName, out var cached))
+                return cached;
+
+            var modPath = CommunityApiClient.LocalSubmissionsModPath;
+            if (string.IsNullOrWhiteSpace(modPath))
+                return null;
+
+            var path = System.IO.Path.Combine(modPath, "Assets", fileName);
+            if (!System.IO.File.Exists(path))
+                return null;
+
+            try
+            {
+                var bytes = System.IO.File.ReadAllBytes(path);
+                var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                tex.LoadImage(bytes);
+                var sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f);
+                _modIconCache[fileName] = sprite;
+                return sprite;
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log.LogWarning($"[TheQuartermaster] Failed to load mod icon {fileName}: {ex.Message}");
+                return null;
+            }
+        }
+
+        private static Sprite GetObjectiveIconSprite(string iconKey)
+        {
+            if (string.IsNullOrWhiteSpace(iconKey))
+                return null;
+
+            var staticIcons = EFTHardSettings.Instance?.StaticIcons;
+            var sprites = staticIcons?.QuestTypeSprites;
+            if (sprites == null)
+                return null;
+
+            iconKey = iconKey.ToLowerInvariant();
+            return iconKey switch
+            {
+                "kill" => FindMatchingSprite(sprites, "Elimination", "Kill"),
+                "handover" => FindMatchingSprite(sprites, "HandOver", "Completion", "PickUp"),
+                "find" => FindMatchingSprite(sprites, "PickUp", "Find", "Completion"),
+                "plant" => FindMatchingSprite(sprites, "Place", "Plant", "Completion"),
+                "location" => FindMatchingSprite(sprites, "Exploration", "Location"),
+                "survive" => FindMatchingSprite(sprites, "Survival"),
+                "extract" => FindMatchingSprite(sprites, "Exit", "Extract", "Survival"),
+                "visit" => FindMatchingSprite(sprites, "Exploration", "Visit", "Location"),
+                _ => null
+            };
+        }
+
+        private static Sprite GetStaticIconFallback(string iconKey)
+        {
+            var staticIcons = EFTHardSettings.Instance?.StaticIcons;
+            if (staticIcons == null)
+                return null;
+
+            BuildStaticIconCache(staticIcons);
+            if (_staticIconCache == null || _staticIconCache.Count == 0)
+                return null;
+
+            string[] keywords = iconKey.ToLowerInvariant() switch
+            {
+                "kill" => new[] { "Elimination", "Kill", "Target", "Combat", "Boss" },
+                "handover" => new[] { "Completion", "HandOver", "Hand", "Turn", "Give" },
+                "find" => new[] { "Completion", "PickUp", "Find", "Search", "Item" },
+                "plant" => new[] { "Place", "Plant", "Completion", "Arrow", "Drop" },
+                "location" => new[] { "Exploration", "Location", "Map", "Place" },
+                "survive" => new[] { "Exploration", "Survival", "Survive", "Raid" },
+                "extract" => new[] { "Exploration", "Exit", "Extract", "Leave" },
+                "visit" => new[] { "Exploration", "Visit", "Location", "Marker" },
+                _ => new[] { iconKey }
+            };
+
+            foreach (var kw in keywords)
+            {
+                foreach (var (name, sprite) in _staticIconCache)
+                {
+                    if (name.IndexOf(kw, StringComparison.OrdinalIgnoreCase) >= 0)
+                        return sprite;
+                }
+            }
+
+            return null;
+        }
+
+        private static Sprite FindMatchingSprite(Dictionary<RawQuestClass.EQuestType, Sprite> sprites, params string[] keywords)
+        {
+            if (sprites == null || keywords == null)
+                return null;
+
+            try
+            {
+                var names = Enum.GetNames(typeof(RawQuestClass.EQuestType));
+                foreach (var kw in keywords)
+                {
+                    if (string.IsNullOrWhiteSpace(kw))
+                        continue;
+
+                    foreach (var n in names)
+                    {
+                        if (n.IndexOf(kw, StringComparison.OrdinalIgnoreCase) >= 0
+                            && Enum.TryParse<RawQuestClass.EQuestType>(n, true, out var questType)
+                            && sprites.ContainsKey(questType))
+                        {
+                            return sprites[questType];
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            return null;
+        }
+
+        private static Sprite GetRewardIconSprite(string iconKey)
+        {
+            if (string.IsNullOrWhiteSpace(iconKey))
+                return null;
+
+            if (iconKey.Equals("item", StringComparison.OrdinalIgnoreCase))
+                return GetObjectiveIconSprite("find");
+
+            var staticIcons = EFTHardSettings.Instance?.StaticIcons;
+            if (staticIcons == null)
+                return null;
+
+            BuildStaticIconCache(staticIcons);
+
+            string[] keywords = iconKey switch
+            {
+                "roubles" => new[] { "rouble", "roubles" },
+                "dollars" => new[] { "dollar", "dollars" },
+                "euros" => new[] { "euro", "euros" },
+                "exp" => new[] { "exp", "experience", "xp" },
+                "standing" => new[] { "standing", "reputation", "loyalty" },
+                _ => new[] { iconKey }
+            };
+
+            foreach (var (name, sprite) in _staticIconCache)
+            {
+                var lower = name.ToLowerInvariant();
+                if (keywords.Any(k => lower.Contains(k)))
+                    return sprite;
+            }
+
+            return null;
+        }
+
+        private static void BuildStaticIconCache(object staticIcons)
+        {
+            if (_staticIconCache != null)
+                return;
+
+            _staticIconCache = new List<(string, Sprite)>();
+            var type = staticIcons.GetType();
+            var flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
+
+            foreach (var field in type.GetFields(flags))
+            {
+                if (field.FieldType == typeof(Sprite))
+                {
+                    var sprite = field.GetValue(staticIcons) as Sprite;
+                    if (sprite != null)
+                        _staticIconCache.Add((field.Name, sprite));
+                }
+                else if (field.FieldType == typeof(Sprite[]))
+                {
+                    var arr = field.GetValue(staticIcons) as Sprite[];
+                    if (arr != null)
+                    {
+                        foreach (var sprite in arr.Where(s => s != null))
+                            _staticIconCache.Add((field.Name, sprite));
+                    }
+                }
+            }
+
+            foreach (var prop in type.GetProperties(flags).Where(p => p.CanRead))
+            {
+                if (prop.PropertyType == typeof(Sprite))
+                {
+                    var sprite = prop.GetValue(staticIcons) as Sprite;
+                    if (sprite != null)
+                        _staticIconCache.Add((prop.Name, sprite));
+                }
+                else if (prop.PropertyType == typeof(Sprite[]))
+                {
+                    var arr = prop.GetValue(staticIcons) as Sprite[];
+                    if (arr != null)
+                    {
+                        foreach (var sprite in arr.Where(s => s != null))
+                            _staticIconCache.Add((prop.Name, sprite));
+                    }
+                }
+            }
+
+            // Unpack QuestTypeSprites dictionary so each EQuestType key is searchable by name
+            try
+            {
+                var questSpritesProp = type.GetProperty("QuestTypeSprites", flags);
+                var dict = questSpritesProp?.GetValue(staticIcons);
+                if (dict is IEnumerable enumerable)
+                {
+                    foreach (var item in enumerable)
+                    {
+                        var itemType = item.GetType();
+                        var keyProp = itemType.GetProperty("Key");
+                        var valueProp = itemType.GetProperty("Value");
+                        if (keyProp == null || valueProp == null)
+                            continue;
+
+                        var key = keyProp.GetValue(item)?.ToString();
+                        var sprite = valueProp.GetValue(item) as Sprite;
+                        if (!string.IsNullOrWhiteSpace(key) && sprite != null)
+                            _staticIconCache.Add((key, sprite));
+                    }
+                }
+            }
+            catch { }
         }
 
         private static void WireEftButtonClick(GameObject btnObj, UnityEngine.Events.UnityAction callback)
@@ -1288,7 +1744,7 @@ namespace TheQuartermaster.Client.UI
             if (lines.Count == 0)
                 return string.Empty;
 
-            return "\n\nRewards:\n" + string.Join("\n", lines.Select(l => "- " + l));
+            return string.Join("\n", lines);
         }
 
         private static string ResolveItemName(string tpl)

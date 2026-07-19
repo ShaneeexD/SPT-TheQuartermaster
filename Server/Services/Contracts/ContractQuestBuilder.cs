@@ -13,7 +13,7 @@ public static class ContractQuestBuilder
 {
     private static readonly Random Rng = new();
 
-    private static readonly Dictionary<string, string> DisplayNames = new(StringComparer.OrdinalIgnoreCase)
+    internal static readonly Dictionary<string, string> DisplayNames = new(StringComparer.OrdinalIgnoreCase)
     {
         ["any"] = "Tarkov",
         ["bigmap"] = "Customs",
@@ -267,7 +267,7 @@ public static class ContractQuestBuilder
     }
 
 
-    private static string ToDisplayName(string? location)
+    internal static string ToDisplayName(string? location)
     {
         if (string.IsNullOrWhiteSpace(location))
         {
@@ -277,7 +277,7 @@ public static class ContractQuestBuilder
         return DisplayNames.TryGetValue(location, out var display) ? display : location;
     }
 
-    private static string ToBossDisplayName(string? faction)
+    internal static string ToBossDisplayName(string? faction)
     {
         if (string.IsNullOrWhiteSpace(faction))
         {

@@ -1,8 +1,11 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Google.Cloud.Firestore;
 using SPTarkov.DI.Annotations;
+using SPTarkov.Server.Core.Helpers;
+using SPTarkov.Server.Core.Models.Common;
 using SPTarkov.Server.Core.Models.Utils;
 using TheQuartermaster.Server.Models;
 using TheQuartermaster.Server.Models.Contracts;
@@ -72,7 +75,8 @@ public class ListingConfigData
 [Injectable(InjectionType.Singleton)]
 public class ContractFileService(
     ISptLogger<ContractFileService> logger,
-    ConfigService configService
+    ConfigService configService,
+    ItemHelper itemHelper
 )
 {
     private readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(15) };
@@ -216,6 +220,7 @@ public class ContractFileService(
             }
 
             logger.DebugInfo($"[TheQuartermaster] Contract file fetched from {FileUrl}: version={bundle.Version}, {bundle.Definitions.Count} definitions, {bundle.ScheduleEntries.Count} schedule entries, {bundle.Submissions.Count} submissions.");
+            WriteClientSubmissionsFile(bundle);
             return bundle;
         }
         catch (Exception ex)
@@ -223,6 +228,188 @@ public class ContractFileService(
             logger.DebugWarning($"[TheQuartermaster] Contract file fetch error: {ex.Message}");
             return GetStaleCacheIfAvailable();
         }
+    }
+
+    private void WriteClientSubmissionsFile(ContractDataBundle bundle)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(configService.ModPath))
+            {
+                return;
+            }
+
+            var outputPath = Path.Combine(configService.ModPath, "client_submissions.json");
+            var submissionsNode = new JsonArray();
+
+            foreach (var submission in bundle.Submissions ?? [])
+            {
+                var node = JsonSerializer.SerializeToNode(submission, JsonOptions)?.AsObject();
+                if (node is null)
+                {
+                    continue;
+                }
+
+                var displayObjectives = new JsonArray();
+                foreach (var objective in submission.Objectives ?? [])
+                {
+                    var (text, icon) = BuildObjectiveDisplay(objective);
+                    displayObjectives.Add(new JsonObject { ["text"] = text, ["icon"] = icon });
+                }
+                if (displayObjectives.Count > 0)
+                {
+                    node["display_objectives"] = displayObjectives;
+                }
+
+                var displayRewards = new JsonArray();
+                foreach (var (text, icon) in BuildRewardDisplay(submission.Rewards))
+                {
+                    displayRewards.Add(new JsonObject { ["text"] = text, ["icon"] = icon });
+                }
+                if (displayRewards.Count > 0)
+                {
+                    node["display_rewards"] = displayRewards;
+                }
+
+                submissionsNode.Add(node);
+            }
+
+            var root = new JsonObject { ["submissions"] = submissionsNode };
+            Directory.CreateDirectory(configService.ModPath);
+            File.WriteAllText(outputPath, root.ToJsonString(JsonOptions));
+            logger.DebugInfo($"[TheQuartermaster] Wrote client submissions file to {outputPath}");
+        }
+        catch (Exception ex)
+        {
+            logger.DebugWarning($"[TheQuartermaster] Failed to write client submissions file: {ex.Message}");
+        }
+    }
+
+    private string ResolveItemName(string? tpl)
+    {
+        if (string.IsNullOrWhiteSpace(tpl))
+        {
+            return "item";
+        }
+
+        try
+        {
+            var result = itemHelper.GetItem(new MongoId(tpl));
+            if (result.Value is not null && !string.IsNullOrWhiteSpace(result.Value.Name))
+            {
+                return result.Value.Name;
+            }
+        }
+        catch { }
+
+        return tpl;
+    }
+
+    private (string Text, string Icon) BuildObjectiveDisplay(ContractObjective objective)
+    {
+        if (!string.IsNullOrWhiteSpace(objective.Description))
+        {
+            return (objective.Description, ObjectiveIconForType(objective.Type));
+        }
+
+        var count = Math.Max(objective.Count, 1);
+        var map = ContractQuestBuilder.ToDisplayName(objective.TargetMap);
+        var itemName = ResolveItemName(objective.TargetTpl);
+        var bossFaction = string.IsNullOrWhiteSpace(objective.TargetFaction) ? objective.TargetTpl : objective.TargetFaction;
+        var boss = ContractQuestBuilder.ToBossDisplayName(bossFaction);
+        var zone = objective.TargetZone ?? string.Empty;
+        var fir = objective.RequiredInRaid ? " (Found in Raid)" : string.Empty;
+
+        var locationSuffix = map != "Tarkov" ? $" on {map}" : string.Empty;
+        var zoneSuffix = string.IsNullOrWhiteSpace(zone) ? string.Empty : $" in {zone}";
+
+        switch (objective.Type)
+        {
+            case "HandOverItem":
+            case "HandOverFirItem":
+                return ($"Hand over {count}x {itemName}{fir}{zoneSuffix}", "handover");
+            case "PlantItem":
+                return ($"Plant {count}x {itemName}{zoneSuffix}", "plant");
+            case "KillScavs":
+                return ($"Eliminate {count} Scav{Plural(count)}{locationSuffix}", "kill");
+            case "KillPmcs":
+                return ($"Eliminate {count} PMC{Plural(count)}{locationSuffix}", "kill");
+            case "KillBoss":
+                return ($"Eliminate {count} {boss}{locationSuffix}", "kill");
+            case "SurviveMap":
+                return ($"Survive {count} raid{Plural(count)} on {map}", "survive");
+            case "ExtractMap":
+                return ($"Extract from {map} {count} time{Plural(count)}", "extract");
+            case "VisitPlace":
+                return ($"Visit {map}{zoneSuffix}", "visit");
+            case "FindItem":
+                return ($"Find {count}x {itemName}{fir}{zoneSuffix}", "find");
+            default:
+                return (objective.Description ?? objective.Type, ObjectiveIconForType(objective.Type));
+        }
+    }
+
+    private string Plural(int count)
+    {
+        return count == 1 ? string.Empty : "s";
+    }
+
+    private string ObjectiveIconForType(string? type)
+    {
+        switch (type)
+        {
+            case "KillScavs":
+            case "KillPmcs":
+            case "KillBoss":
+                return "kill";
+            case "HandOverItem":
+            case "HandOverFirItem":
+            case "PlantItem":
+                return "handover";
+            case "SurviveMap":
+            case "ExtractMap":
+            case "VisitPlace":
+                return "location";
+            case "FindItem":
+                return "find";
+            default:
+                return "default";
+        }
+    }
+
+    private List<(string Text, string Icon)> BuildRewardDisplay(ContractRewards rewards)
+    {
+        var list = new List<(string, string)>();
+
+        if (rewards.Experience > 0)
+        {
+            list.Add(($"+{rewards.Experience:N0} EXP", "exp"));
+        }
+
+        if (rewards.Roubles > 0)
+        {
+            list.Add(($"+{rewards.Roubles:N0} Roubles", "roubles"));
+        }
+
+        if (rewards.Money is { Amount: > 0 } money)
+        {
+            var icon = money.Currency?.ToLowerInvariant().Replace(" ", string.Empty) ?? "money";
+            list.Add(($"+{money.Amount:N0} {money.Currency}", icon));
+        }
+
+        if (rewards.TraderStanding > 0)
+        {
+            list.Add(($"+{rewards.TraderStanding:F2} trader standing", "standing"));
+        }
+
+        foreach (var item in rewards.Items)
+        {
+            var name = ResolveItemName(item.Tpl);
+            var fir = item.FoundInRaid ? " (Found in Raid)" : string.Empty;
+            list.Add(($"+{item.Count}x {name}{fir}", "item"));
+        }
+
+        return list;
     }
 
     private ContractDataBundle? GetStaleCacheIfAvailable()
