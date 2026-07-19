@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using EFT.UI;
 using Newtonsoft.Json.Linq;
 using TheQuartermaster.Client.Services;
 using TMPro;
@@ -20,7 +21,12 @@ namespace TheQuartermaster.Client.UI
         private float _lastSubmissionsRefresh = -999f;
         private const float SubmissionRefreshSeconds = 60f;
         private GameObject _communityTab;
-        private float _lastTabSearch = -999f;
+        private Tab _communityTabComponent;
+        private Transform _tabBarParent;
+        private bool _qmDetected = false;
+        private List<Tab> _siblingTabs = new List<Tab>();
+
+        public Component CurrentTraderScreen { get; set; }
 
         public bool Visible
         {
@@ -30,6 +36,7 @@ namespace TheQuartermaster.Client.UI
                 _visible = value;
                 if (_visible)
                 {
+                    _cachedSubmissions = null;
                     TryRefreshSubmissions();
                 }
             }
@@ -59,7 +66,7 @@ namespace TheQuartermaster.Client.UI
                 Visible = !Visible;
             }
 
-            TryAttachCommunityTab();
+            RefreshCommunityTab();
         }
 
         private void OnStateChanged()
@@ -155,21 +162,27 @@ namespace TheQuartermaster.Client.UI
             }
         }
 
+        private List<JObject> _cachedSubmissions;
+
         private void DrawList()
         {
-            var submissions = CommunityApiClient.Submissions;
-            if (submissions.Count == 0)
+            // Cache submissions at start of draw to avoid layout mismatch if list changes between Layout/Repaint
+            if (_cachedSubmissions == null)
+                _cachedSubmissions = CommunityApiClient.Submissions.ToList();
+
+            _listScroll = GUILayout.BeginScrollView(_listScroll);
+            if (_cachedSubmissions.Count == 0)
             {
                 GUILayout.Label("No pending community submissions.");
-                return;
             }
-
-            GUILayout.Label($"Pending Submissions ({submissions.Count})");
-            _listScroll = GUILayout.BeginScrollView(_listScroll);
-            foreach (var submission in submissions)
+            else
             {
-                DrawSubmissionRow(submission);
-                GUILayout.Space(4);
+                GUILayout.Label($"Pending Submissions ({_cachedSubmissions.Count})");
+                foreach (var submission in _cachedSubmissions)
+                {
+                    DrawSubmissionRow(submission);
+                    GUILayout.Space(4);
+                }
             }
             GUILayout.EndScrollView();
         }
@@ -287,71 +300,322 @@ namespace TheQuartermaster.Client.UI
             }
         }
 
-        private void TryAttachCommunityTab()
+        public void RefreshCommunityTab()
+        {
+            if (CurrentTraderScreen == null || CurrentTraderScreen.gameObject == null || !CurrentTraderScreen.gameObject.activeInHierarchy)
+            {
+                if (_communityTab != null && _communityTab.activeSelf)
+                    _communityTab.SetActive(false);
+                Visible = false;
+                return;
+            }
+
+            bool isQuartermaster = false;
+            GameObject matched = null;
+            string matchedText = null;
+
+            // 1. Check transform names
+            foreach (Transform t in CurrentTraderScreen.GetComponentsInChildren<Transform>(true))
+            {
+                if (t != null && !string.IsNullOrEmpty(t.name) && t.name.IndexOf("quartermaster", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    isQuartermaster = true;
+                    matched = t.gameObject;
+                    matchedText = t.name;
+                    break;
+                }
+            }
+
+            // 2. Check displayed text (TMP_Text / Text)
+            if (!isQuartermaster)
+            {
+                foreach (var txt in CurrentTraderScreen.GetComponentsInChildren<TMP_Text>(true))
+                {
+                    if (txt != null && !string.IsNullOrEmpty(txt.text) && txt.text.IndexOf("quartermaster", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        isQuartermaster = true;
+                        matched = txt.gameObject;
+                        matchedText = txt.text;
+                        break;
+                    }
+                }
+            }
+
+            if (!isQuartermaster)
+            {
+                foreach (var txt in CurrentTraderScreen.GetComponentsInChildren<Text>(true))
+                {
+                    if (txt != null && !string.IsNullOrEmpty(txt.text) && txt.text.IndexOf("quartermaster", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        isQuartermaster = true;
+                        matched = txt.gameObject;
+                        matchedText = txt.text;
+                        break;
+                    }
+                }
+            }
+
+            if (isQuartermaster)
+            {
+                if (!_qmDetected)
+                {
+                    Plugin.Log.LogInfo($"[TheQuartermaster] Detected Quartermaster from {matched?.name ?? "unknown"}: {matchedText}");
+                    _qmDetected = true;
+                }
+                if (_communityTab == null)
+                    AttachCommunityTab(CurrentTraderScreen);
+                else if (!_communityTab.activeSelf)
+                    _communityTab.SetActive(true);
+            }
+            else
+            {
+                _qmDetected = false;
+                if (_communityTab != null && _communityTab.activeSelf)
+                    _communityTab.SetActive(false);
+                Visible = false;
+            }
+        }
+
+        public void AttachCommunityTab(Component traderScreen)
         {
             if (_communityTab != null)
                 return;
 
-            if (Time.time - _lastTabSearch < 2f)
+            if (traderScreen == null)
                 return;
-            _lastTabSearch = Time.time;
+
+            GameObject services = null;
+
+            // Search the opened trader screen for the existing Services tab.
+            foreach (Transform t in traderScreen.GetComponentsInChildren<Transform>(true))
+            {
+                if (t != null && t.name == "Services")
+                {
+                    services = t.gameObject;
+                    break;
+                }
+            }
+
+            if (services == null)
+            {
+                Plugin.Log.LogWarning("[TheQuartermaster] Could not find 'Services' tab under the trader screen to clone.");
+                return;
+            }
 
             try
             {
-                GameObject services = null;
-
-                // Search both active scene paths and loaded objects (works when the trader UI is inactive).
-                var all = Resources.FindObjectsOfTypeAll<GameObject>();
-                foreach (var go in all)
-                {
-                    if (go == null || go.name != "Services")
-                        continue;
-
-                    var p1 = go.transform.parent;
-                    var p2 = p1?.parent;
-                    var p3 = p2?.parent;
-                    if (p1?.name == "Tabs" && p2?.name == "Tab Bar" && p3?.name == "Trader Screens Group")
-                    {
-                        services = go;
-                        break;
-                    }
-                }
-
-                if (services == null)
-                {
-                    Plugin.Log.LogWarning("[TheQuartermaster] Could not find 'Trader Screens Group/Tab Bar/Tabs/Services' to clone.");
-                    return;
-                }
-
                 var tabs = services.transform.parent;
+
+                // Log the parent and siblings for debugging
+                Plugin.Log.LogInfo($"[TheQuartermaster] Tab bar parent: {tabs.name}, childCount={tabs.childCount}");
+                for (int i = 0; i < tabs.childCount; i++)
+                {
+                    var child = tabs.GetChild(i);
+                    Plugin.Log.LogInfo($"[TheQuartermaster]   Tab[{i}]: {child.name} active={child.gameObject.activeSelf}");
+                }
+
+                // Temporarily activate the source so the clone inherits active children
+                bool wasActive = services.activeSelf;
+                services.SetActive(true);
+
                 var clone = Instantiate(services, tabs);
                 clone.name = "CommunityTab";
-                clone.transform.SetAsLastSibling();
 
-                var text = clone.GetComponentInChildren<TMP_Text>(true);
-                if (text != null)
-                    text.text = "Community";
+                // Restore original Services tab state
+                services.SetActive(wasActive);
 
-                var button = clone.GetComponent<Button>();
-                if (button != null)
+                // Force the clone and all children active
+                clone.SetActive(true);
+                foreach (Transform child in clone.transform)
                 {
-                    button.onClick.RemoveAllListeners();
-                    button.onClick.AddListener(() => { Visible = !Visible; });
+                    child.gameObject.SetActive(true);
                 }
 
-                var toggle = clone.GetComponent<Toggle>();
-                if (toggle != null)
+                // The tab bar layout arranges right-to-left by sibling index (index 0 = rightmost).
+                // To place Community to the RIGHT of Services, insert at servicesIndex (before Services).
+                int servicesIndex = services.transform.GetSiblingIndex();
+                clone.transform.SetSiblingIndex(servicesIndex);
+
+                // Log Services and clone RectTransform info for debugging
+                var servicesRT = services.transform as RectTransform;
+                var cloneRT = clone.transform as RectTransform;
+                if (servicesRT != null && cloneRT != null)
                 {
-                    toggle.onValueChanged.RemoveAllListeners();
-                    toggle.onValueChanged.AddListener(isOn => { if (isOn) Visible = true; });
+                    Plugin.Log.LogInfo($"[TheQuartermaster] Services RT: pos={servicesRT.anchoredPosition} size={servicesRT.rect.size} sibling={servicesIndex}");
+                    Plugin.Log.LogInfo($"[TheQuartermaster] Clone RT: pos={cloneRT.anchoredPosition} size={cloneRT.rect.size} sibling={cloneRT.GetSiblingIndex()}");
                 }
+
+                // Log all components on the clone for debugging
+                var comps = clone.GetComponents<Component>();
+                Plugin.Log.LogInfo($"[TheQuartermaster] Clone components: {string.Join(", ", comps.Select(c => c.GetType().Name))}");
+
+                // Destroy LocalizedText so it doesn't override our text, then set text on ALL TMP_Text components
+                var locText = clone.GetComponent<LocalizedText>();
+                if (locText != null)
+                {
+                    GameObject.Destroy(locText);
+                    Plugin.Log.LogInfo("[TheQuartermaster] Destroyed LocalizedText on CommunityTab.");
+                }
+                var allTexts = clone.GetComponentsInChildren<TMP_Text>(true);
+                foreach (var t in allTexts)
+                {
+                    t.text = "QM";
+                }
+                Plugin.Log.LogInfo($"[TheQuartermaster] Set 'QM' on {allTexts.Length} TMP_Text components.");
+
+                // Get the Tab component directly
+                var tab = clone.GetComponent<Tab>();
+                if (tab == null)
+                {
+                    Plugin.Log.LogError("[TheQuartermaster] No Tab component found on clone.");
+                    return;
+                }
+                _communityTabComponent = tab;
+
+                // Set Interactable=true so CanHandlePointerClick works (it returns !bool_0 && Interactable)
+                tab.Interactable = true;
+
+                // Call vmethod_0(true) to fully enable the tab — sets image alpha to 1f and canvas group unlock status
+                tab.vmethod_0(true);
+
+                // Also manually reset CanvasGroup since vmethod_0 may not cover all cases
+                var cg = clone.GetComponent<CanvasGroup>();
+                if (cg != null)
+                {
+                    cg.alpha = 1f;
+                    cg.interactable = true;
+                    cg.blocksRaycasts = true;
+                    Plugin.Log.LogInfo("[TheQuartermaster] Reset CanvasGroup: alpha=1, interactable=true, blocksRaycasts=true");
+                }
+
+                // Deselect initially — UpdateVisual(false, false) sets bool_0=false, _uiSelected=false
+                tab.UpdateVisual(false, false);
+
+                // Store tab bar parent and collect sibling tabs
+                _tabBarParent = tabs;
+                _siblingTabs.Clear();
+                foreach (Transform sibling in tabs)
+                {
+                    if (sibling.gameObject == clone)
+                        continue;
+                    var siblingTab = sibling.GetComponent<Tab>();
+                    if (siblingTab != null)
+                    {
+                        _siblingTabs.Add(siblingTab);
+                        // Subscribe to OnSelectionChanged so we can deselect Community when another tab is clicked
+                        siblingTab.OnSelectionChanged += OnSiblingTabSelectionChanged;
+                    }
+                }
+                Plugin.Log.LogInfo($"[TheQuartermaster] Subscribed to {_siblingTabs.Count} sibling tabs.");
+
+                // Subscribe to our own tab's OnSelectionChanged — the Tab handles its own clicks via IPointerClickHandler.
+                // HandlePointerClick fires OnSelectionChanged(this, !isSelectedNow).
+                _communityTabComponent.OnSelectionChanged += OnCommunityTabSelectionChanged;
+                Plugin.Log.LogInfo("[TheQuartermaster] Subscribed to Community tab OnSelectionChanged.");
+
+                // Force layout rebuild so the tab appears in the correct position
+                var tabsRT = tabs as RectTransform;
+                if (tabsRT != null)
+                    LayoutRebuilder.ForceRebuildLayoutImmediate(tabsRT);
+                if (cloneRT != null)
+                    LayoutRebuilder.ForceRebuildLayoutImmediate(cloneRT);
+
+                // Start coroutine to rebuild layout next frame (layout groups sometimes need a frame)
+                StartCoroutine(RebuildLayoutNextFrame(tabs, clone, services));
 
                 _communityTab = clone;
-                Plugin.Log.LogInfo("[TheQuartermaster] Injected Community tab into trader tab bar.");
+                Plugin.Log.LogInfo($"[TheQuartermaster] Injected Community tab at sibling index {clone.transform.GetSiblingIndex()} (Services at {servicesIndex}).");
             }
             catch (Exception ex)
             {
                 Plugin.Log.LogError($"[TheQuartermaster] Failed to inject Community tab: {ex.Message}");
+            }
+        }
+
+        private System.Collections.IEnumerator RebuildLayoutNextFrame(Transform parent, GameObject clone, GameObject services)
+        {
+            yield return null; // wait one frame
+            var rt = parent as RectTransform;
+            if (rt != null)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(rt);
+                Plugin.Log.LogInfo($"[TheQuartermaster] Layout rebuilt next frame for {parent.name}, childCount={parent.childCount}");
+
+                // Log all tab positions after rebuild
+                for (int i = 0; i < parent.childCount; i++)
+                {
+                    var child = parent.GetChild(i) as RectTransform;
+                    if (child != null)
+                        Plugin.Log.LogInfo($"[TheQuartermaster]   After rebuild Tab[{i}]: {child.name} pos={child.anchoredPosition} size={child.rect.size}");
+                }
+
+                // Manually position the clone to the right of Services if layout didn't do it correctly
+                var servicesRT = services.transform as RectTransform;
+                var cloneRT = clone.transform as RectTransform;
+                if (servicesRT != null && cloneRT != null)
+                {
+                    float servicesX = servicesRT.anchoredPosition.x;
+                    float cloneX = cloneRT.anchoredPosition.x;
+                    float distance = Mathf.Abs(cloneX - servicesX);
+
+                    // If the clone is too close to Services (overlapping), manually offset it
+                    // Calculate the step from two adjacent original tabs
+                    float step = 0f;
+                    if (parent.childCount >= 3)
+                    {
+                        // Find two original tabs (not the clone) to measure spacing
+                        var positions = new List<float>();
+                        for (int i = 0; i < parent.childCount; i++)
+                        {
+                            var child = parent.GetChild(i) as RectTransform;
+                            if (child != null && child.gameObject != clone)
+                                positions.Add(child.anchoredPosition.x);
+                        }
+                        if (positions.Count >= 2)
+                        {
+                            positions.Sort();
+                            step = positions[1] - positions[0];
+                        }
+                    }
+
+                    if (step > 0f && distance < step * 0.5f)
+                    {
+                        // Place clone to the right of Services (higher x in this layout)
+                        Vector2 newPos = cloneRT.anchoredPosition;
+                        newPos.x = servicesX + step;
+                        cloneRT.anchoredPosition = newPos;
+                        Plugin.Log.LogInfo($"[TheQuartermaster] Manually repositioned CommunityTab from x={cloneX} to x={newPos.x} (Services at x={servicesX}, step={step})");
+                    }
+                }
+            }
+        }
+
+        private void OnCommunityTabSelectionChanged(Tab tab, bool selected)
+        {
+            if (selected)
+            {
+                // Select our tab visually (sendCallback=false: don't call Controller.Show on cloned controller)
+                _communityTabComponent.Select(false, false);
+
+                // Deselect all sibling tabs (hides their content panels via Controller.TryHide)
+                foreach (var siblingTab in _siblingTabs)
+                    siblingTab.Deselect();
+
+                Visible = true;
+            }
+            else
+            {
+                Visible = false;
+            }
+        }
+
+        private void OnSiblingTabSelectionChanged(Tab selectedTab, bool selected)
+        {
+            if (selected && _communityTabComponent != null)
+            {
+                // A sibling tab was selected — deselect Community and hide panel
+                _communityTabComponent.UpdateVisual(false, false);
+                Visible = false;
             }
         }
 

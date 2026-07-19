@@ -42,13 +42,13 @@ namespace TheQuartermaster.Client
 
                 try
                 {
-                    new CommunityTabPatch().Enable();
+                    CommunityTraderTabPatcher.Enable();
                     if (DebugLogging)
-                        Log.LogInfo("[TheQuartermaster] Community tab patch enabled.");
+                        Log.LogInfo("[TheQuartermaster] Community trader tab patcher enabled.");
                 }
                 catch (Exception tabEx)
                 {
-                    Log.LogWarning($"[TheQuartermaster] Community tab patch could not be enabled; use F9 to open the panel: {tabEx.Message}");
+                    Log.LogWarning($"[TheQuartermaster] Community tab patcher could not be enabled; use F9 to open the panel: {tabEx.Message}");
                 }
 
                 if (DebugLogging)

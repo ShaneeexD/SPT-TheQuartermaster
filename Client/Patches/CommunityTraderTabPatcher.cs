@@ -1,62 +1,59 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using HarmonyLib;
-using SPT.Reflection.Patching;
 using TheQuartermaster.Client.UI;
 using UnityEngine;
 
 namespace TheQuartermaster.Client.Patches
 {
-    public class CommunityTabPatch : ModulePatch
+    internal static class CommunityTraderTabPatcher
     {
-        private static Type _tabBarType;
         private static bool _hasLoggedDiscovery;
 
-        protected override MethodBase GetTargetMethod()
+        public static void Enable()
         {
-            try
-            {
-                _tabBarType = AccessTools.TypeByName("EFT.UI.TraderScreensGroup")
-                              ?? AccessTools.TypeByName("EFT.UI.TraderScreen")
-                              ?? AccessTools.TypeByName("EFT.UI.TradeScreen");
+            var harmony = new Harmony("com.shaneeexd.thequartermaster.communitytab");
+            var postfix = new HarmonyMethod(typeof(CommunityTraderTabPatcher).GetMethod("Postfix"));
 
-                if (_tabBarType == null)
+            string[] typeNames = { "EFT.UI.TraderScreensGroup", "EFT.UI.TraderScreen", "EFT.UI.TradeScreen" };
+            var patched = new HashSet<MethodInfo>();
+
+            foreach (var typeName in typeNames)
+            {
+                var type = AccessTools.TypeByName(typeName);
+                if (type == null)
                 {
-                    DiscoverTraderUiTypes();
-                    return null;
+                    Plugin.Log.LogWarning($"[TheQuartermaster] Could not find trader UI type {typeName}.");
+                    continue;
                 }
 
-                var showMethods = AccessTools.GetDeclaredMethods(_tabBarType)
+                var showMethods = AccessTools.GetDeclaredMethods(type)
                     .Where(m => m.Name == "Show")
-                    .OrderByDescending(m => m.GetParameters().Length)
-                    .ToList();
+                    .OrderByDescending(m => m.GetParameters().Length);
 
-                foreach (var m in showMethods)
+                foreach (var method in showMethods)
                 {
-                    Plugin.Log.LogInfo($"[TheQuartermaster] Found Show method on {_tabBarType.Name}: {m} (params: {m.GetParameters().Length})");
+                    if (patched.Contains(method))
+                        continue;
+                    try
+                    {
+                        harmony.Patch(method, postfix: postfix);
+                        patched.Add(method);
+                        Plugin.Log.LogInfo($"[TheQuartermaster] Patched {type.Name}.{method} for Community tab.");
+                    }
+                    catch (Exception ex)
+                    {
+                        Plugin.Log.LogWarning($"[TheQuartermaster] Could not patch {type.Name}.Show: {ex.Message}");
+                    }
                 }
-
-                var method = showMethods.FirstOrDefault();
-
-                if (method == null)
-                {
-                    Plugin.Log.LogWarning($"[TheQuartermaster] {_tabBarType.Name} has no Show method.");
-                    return null;
-                }
-
-                Plugin.Log.LogInfo($"[TheQuartermaster] Patching {_tabBarType.FullName}.{method}.");
-
-                return method;
             }
-            catch (Exception ex)
-            {
-                Plugin.Log.LogError($"[TheQuartermaster] CommunityTabPatch discovery failed: {ex.Message}");
-                return null;
-            }
+
+            if (patched.Count == 0)
+                DiscoverTraderUiTypes();
         }
 
-        [PatchPostfix]
         public static void Postfix(object __instance)
         {
             try
@@ -67,21 +64,17 @@ namespace TheQuartermaster.Client.Patches
                     return;
                 }
 
-                Plugin.Log.LogInfo($"[TheQuartermaster] CommunityTabPatch Postfix fired for {_tabBarType?.Name}.");
+                var traderScreen = __instance as Component;
+                if (traderScreen == null)
+                    return;
 
-                // Try to identify if the currently opened trader is The Quartermaster.
-                bool isQuartermaster = IsQuartermasterTrader(__instance);
-                Plugin.Log.LogInfo($"[TheQuartermaster] IsQuartermasterTrader: {isQuartermaster}");
-                if (isQuartermaster)
-                {
-                    var traderScreen = __instance as Component;
-                    Plugin.Log.LogInfo($"[TheQuartermaster] traderScreen is null: {traderScreen == null}");
-                    CommunityPanel.Instance.AttachCommunityTab(traderScreen);
-                }
+                CommunityPanel.Instance.CurrentTraderScreen = traderScreen;
+                Plugin.Log.LogInfo($"[TheQuartermaster] CommunityTraderTabPatcher set trader screen: {traderScreen.GetType().Name}");
+                CommunityPanel.Instance.RefreshCommunityTab();
             }
             catch (Exception ex)
             {
-                Plugin.Log.LogError($"[TheQuartermaster] CommunityTabPatch postfix error: {ex.Message}");
+                Plugin.Log.LogError($"[TheQuartermaster] CommunityTraderTabPatcher.Postfix error: {ex.Message}");
             }
         }
 
@@ -95,7 +88,10 @@ namespace TheQuartermaster.Client.Patches
                              ?? traverse.Property("SelectedTrader")?.GetValue();
 
                 if (trader == null)
+                {
+                    Plugin.Log.LogWarning("[TheQuartermaster] Could not find Trader/SelectedTrader on trader screen instance.");
                     return false;
+                }
 
                 var traderId = Traverse.Create(trader).Property("Id")?.GetValue()?.ToString()
                                ?? Traverse.Create(trader).Property("ProfileId")?.GetValue()?.ToString()
@@ -130,7 +126,7 @@ namespace TheQuartermaster.Client.Patches
                     .Where(a => !a.IsDynamic)
                     .Where(a => a.GetName().Name == "Assembly-CSharp" || (a.FullName?.StartsWith("Assembly-CSharp") ?? false));
 
-                var traderTypes = new System.Collections.Generic.List<Type>();
+                var traderTypes = new List<Type>();
                 foreach (var asm in assemblies)
                 {
                     try
@@ -142,7 +138,7 @@ namespace TheQuartermaster.Client.Patches
                 }
                 traderTypes = traderTypes.OrderBy(t => t.Name).ToList();
 
-                Plugin.Log.LogWarning("[TheQuartermaster] Could not find a known trader tab bar type. Discovered EFT.UI types: "
+                Plugin.Log.LogWarning("[TheQuartermaster] Could not find a known trader Show method. Discovered EFT.UI types: "
                     + string.Join(", ", traderTypes.Select(t => t.Name).Take(20)));
             }
             catch (Exception ex)
