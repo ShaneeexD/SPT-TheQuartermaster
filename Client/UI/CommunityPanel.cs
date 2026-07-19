@@ -25,6 +25,8 @@ namespace TheQuartermaster.Client.UI
         private Transform _tabBarParent;
         private bool _qmDetected = false;
         private List<Tab> _siblingTabs = new List<Tab>();
+        private int _communityTabOriginalSiblingIndex = -1;
+        private bool _wasOnQM = false;
 
         public Component CurrentTraderScreen { get; set; }
 
@@ -65,7 +67,10 @@ namespace TheQuartermaster.Client.UI
             {
                 Visible = !Visible;
             }
+        }
 
+        private void LateUpdate()
+        {
             RefreshCommunityTab();
         }
 
@@ -305,74 +310,100 @@ namespace TheQuartermaster.Client.UI
             if (CurrentTraderScreen == null || CurrentTraderScreen.gameObject == null || !CurrentTraderScreen.gameObject.activeInHierarchy)
             {
                 if (_communityTab != null && _communityTab.activeSelf)
-                    _communityTab.SetActive(false);
+                {
+                    if (_communityTabComponent != null)
+                    {
+                        _communityTabComponent.UpdateVisual(false, false);
+                        _communityTabComponent.vmethod_0(false);
+                    }
+                    if (_tabBarParent != null && _communityTabOriginalSiblingIndex >= 0)
+                        _communityTab.transform.SetSiblingIndex(_communityTabOriginalSiblingIndex);
+                }
                 Visible = false;
                 return;
             }
 
+            // Detect QM by checking the TraderClass property on TraderScreensGroup
             bool isQuartermaster = false;
-            GameObject matched = null;
-            string matchedText = null;
+            string traderName = null;
 
-            // 1. Check transform names
-            foreach (Transform t in CurrentTraderScreen.GetComponentsInChildren<Transform>(true))
+            var screensGroup = CurrentTraderScreen as TraderScreensGroup;
+            if (screensGroup != null && screensGroup.TraderClass != null)
             {
-                if (t != null && !string.IsNullOrEmpty(t.name) && t.name.IndexOf("quartermaster", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
+                var trader = screensGroup.TraderClass;
+                var traderId = trader.Id;
+                var nickname = trader.LocalizedName;
+                traderName = !string.IsNullOrWhiteSpace(nickname) ? nickname : traderId;
+
+                if (!string.IsNullOrWhiteSpace(traderId) && traderId.IndexOf("quartermaster", StringComparison.OrdinalIgnoreCase) >= 0)
                     isQuartermaster = true;
-                    matched = t.gameObject;
-                    matchedText = t.name;
-                    break;
-                }
-            }
-
-            // 2. Check displayed text (TMP_Text / Text)
-            if (!isQuartermaster)
-            {
-                foreach (var txt in CurrentTraderScreen.GetComponentsInChildren<TMP_Text>(true))
-                {
-                    if (txt != null && !string.IsNullOrEmpty(txt.text) && txt.text.IndexOf("quartermaster", StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        isQuartermaster = true;
-                        matched = txt.gameObject;
-                        matchedText = txt.text;
-                        break;
-                    }
-                }
-            }
-
-            if (!isQuartermaster)
-            {
-                foreach (var txt in CurrentTraderScreen.GetComponentsInChildren<Text>(true))
-                {
-                    if (txt != null && !string.IsNullOrEmpty(txt.text) && txt.text.IndexOf("quartermaster", StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        isQuartermaster = true;
-                        matched = txt.gameObject;
-                        matchedText = txt.text;
-                        break;
-                    }
-                }
+                else if (!string.IsNullOrWhiteSpace(nickname) && nickname.IndexOf("quartermaster", StringComparison.OrdinalIgnoreCase) >= 0)
+                    isQuartermaster = true;
             }
 
             if (isQuartermaster)
             {
                 if (!_qmDetected)
                 {
-                    Plugin.Log.LogInfo($"[TheQuartermaster] Detected Quartermaster from {matched?.name ?? "unknown"}: {matchedText}");
+                    Plugin.Log.LogInfo($"[TheQuartermaster] Detected Quartermaster trader: {traderName}");
                     _qmDetected = true;
                 }
                 if (_communityTab == null)
+                {
                     AttachCommunityTab(CurrentTraderScreen);
-                else if (!_communityTab.activeSelf)
-                    _communityTab.SetActive(true);
+                }
+                else
+                {
+                    if (!_communityTab.activeSelf)
+                        _communityTab.SetActive(true);
+                    // Re-enable if we were previously not on QM
+                    if (!_wasOnQM)
+                    {
+                        Plugin.Log.LogInfo("[TheQuartermaster] Re-enabling QM tab (transitioning to QM).");
+                        if (_communityTabComponent != null)
+                        {
+                            _communityTabComponent.Interactable = true;
+                            _communityTabComponent.vmethod_0(true);
+                        }
+                        var cg = _communityTab.GetComponent<CanvasGroup>();
+                        if (cg != null)
+                        {
+                            cg.alpha = 1f;
+                            cg.interactable = true;
+                            cg.blocksRaycasts = true;
+                        }
+                    }
+                }
+                _wasOnQM = true;
             }
             else
             {
                 _qmDetected = false;
+                _wasOnQM = false;
                 if (_communityTab != null && _communityTab.activeSelf)
-                    _communityTab.SetActive(false);
-                Visible = false;
+                {
+                    Plugin.Log.LogInfo($"[TheQuartermaster] Not on QM (current: {traderName ?? "unknown"}) — deselecting and greying out QM tab.");
+                    if (_communityTabComponent != null)
+                    {
+                        // Force deselect: set bool_0=false, _uiSelected=false, then update visuals
+                        _communityTabComponent.UpdateVisual(false, false);
+                        // Grey out and disable interaction
+                        _communityTabComponent.Interactable = false;
+                        _communityTabComponent.vmethod_0(false);
+                    }
+                    // Also reset CanvasGroup directly
+                    var cg = _communityTab.GetComponent<CanvasGroup>();
+                    if (cg != null)
+                    {
+                        cg.alpha = 0.5f;
+                        cg.interactable = false;
+                        cg.blocksRaycasts = false;
+                    }
+                    // Restore original sibling index
+                    if (_tabBarParent != null && _communityTabOriginalSiblingIndex >= 0)
+                        _communityTab.transform.SetSiblingIndex(_communityTabOriginalSiblingIndex);
+                    Visible = false;
+                }
             }
         }
 
@@ -459,7 +490,7 @@ namespace TheQuartermaster.Client.UI
                 var allTexts = clone.GetComponentsInChildren<TMP_Text>(true);
                 foreach (var t in allTexts)
                 {
-                    t.text = "QM";
+                    t.text = "VOTING";
                 }
                 Plugin.Log.LogInfo($"[TheQuartermaster] Set 'QM' on {allTexts.Length} TMP_Text components.");
 
@@ -524,6 +555,7 @@ namespace TheQuartermaster.Client.UI
                 StartCoroutine(RebuildLayoutNextFrame(tabs, clone, services));
 
                 _communityTab = clone;
+                _communityTabOriginalSiblingIndex = clone.transform.GetSiblingIndex();
                 Plugin.Log.LogInfo($"[TheQuartermaster] Injected Community tab at sibling index {clone.transform.GetSiblingIndex()} (Services at {servicesIndex}).");
             }
             catch (Exception ex)
@@ -601,10 +633,18 @@ namespace TheQuartermaster.Client.UI
                 foreach (var siblingTab in _siblingTabs)
                     siblingTab.Deselect();
 
+                // Move to end of siblings so it renders on top (above Services)
+                if (_communityTab != null && _tabBarParent != null)
+                    _communityTab.transform.SetAsLastSibling();
+
                 Visible = true;
             }
             else
             {
+                // Restore original sibling index so it renders behind Services again
+                if (_communityTab != null && _tabBarParent != null && _communityTabOriginalSiblingIndex >= 0)
+                    _communityTab.transform.SetSiblingIndex(_communityTabOriginalSiblingIndex);
+
                 Visible = false;
             }
         }
@@ -613,8 +653,16 @@ namespace TheQuartermaster.Client.UI
         {
             if (selected && _communityTabComponent != null)
             {
+                Plugin.Log.LogInfo($"[TheQuartermaster] Sibling tab {selectedTab.name} selected, deselecting QM tab.");
+
                 // A sibling tab was selected — deselect Community and hide panel
                 _communityTabComponent.UpdateVisual(false, false);
+                _communityTabComponent.Deselect();
+
+                // Restore original sibling index so it renders behind Services again
+                if (_communityTab != null && _tabBarParent != null && _communityTabOriginalSiblingIndex >= 0)
+                    _communityTab.transform.SetSiblingIndex(_communityTabOriginalSiblingIndex);
+
                 Visible = false;
             }
         }
