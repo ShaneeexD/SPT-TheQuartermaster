@@ -21,12 +21,14 @@ namespace TheQuartermaster.Client.Services
         private static ConfigEntry<string> _apiBaseUrl;
         private static string _storagePath;
         private static Timer _pollTimer;
+        private static Timer _tokenRefreshTimer;
 
         public static string Uuid { get; private set; } = string.Empty;
         public static string IdToken { get; private set; } = string.Empty;
         public static string DisplayName { get; private set; } = string.Empty;
         public static string LinkCode { get; private set; } = string.Empty;
         public static long LinkCodeExpiresAt { get; private set; } = 0;
+        public static long TokenExpiresAt { get; private set; } = 0;
         public static string LastError { get; set; } = string.Empty;
         public static bool IsLinked => !string.IsNullOrWhiteSpace(IdToken);
 
@@ -34,6 +36,7 @@ namespace TheQuartermaster.Client.Services
         public static JObject SelectedSubmission { get; set; }
 
         public static event Action OnStateChanged;
+        public static event Action OnLinked;
 
         public static void Init(ConfigFile config, string pluginFolder)
         {
@@ -58,6 +61,9 @@ namespace TheQuartermaster.Client.Services
                         Uuid = auth.Uuid ?? Guid.NewGuid().ToString("N");
                         IdToken = auth.IdToken ?? string.Empty;
                         DisplayName = auth.DisplayName ?? string.Empty;
+                        TokenExpiresAt = auth.TokenExpiresAt;
+                        if (IsLinked && TokenExpiresAt == 0)
+                            TokenExpiresAt = ParseTokenExpiry(IdToken);
                     }
                 }
             }
@@ -71,6 +77,10 @@ namespace TheQuartermaster.Client.Services
                 Uuid = Guid.NewGuid().ToString("N");
                 SaveAuth();
             }
+            else if (IsLinked)
+            {
+                StartTokenRefresh();
+            }
         }
 
         private static void SaveAuth()
@@ -81,7 +91,8 @@ namespace TheQuartermaster.Client.Services
                 {
                     Uuid = Uuid,
                     IdToken = IdToken,
-                    DisplayName = DisplayName
+                    DisplayName = DisplayName,
+                    TokenExpiresAt = TokenExpiresAt
                 };
                 File.WriteAllText(_storagePath, JsonConvert.SerializeObject(auth, Formatting.Indented));
             }
@@ -160,6 +171,20 @@ namespace TheQuartermaster.Client.Services
             _pollTimer = null;
         }
 
+        public static void Unlink()
+        {
+            IdToken = string.Empty;
+            DisplayName = string.Empty;
+            LinkCode = string.Empty;
+            LinkCodeExpiresAt = 0;
+            TokenExpiresAt = 0;
+            SaveAuth();
+            StopPolling();
+            _tokenRefreshTimer?.Dispose();
+            _tokenRefreshTimer = null;
+            OnStateChanged?.Invoke();
+        }
+
         public static void PollLinkStatus()
         {
             var url = ApiUrl($"link-status?uuid={Uri.EscapeDataString(Uuid)}");
@@ -187,14 +212,7 @@ namespace TheQuartermaster.Client.Services
                     var status = JsonConvert.DeserializeObject<CommunityLinkStatusResponse>(json);
                     if (status != null && status.Linked)
                     {
-                        IdToken = status.IdToken ?? string.Empty;
-                        DisplayName = status.DisplayName ?? string.Empty;
-                        LinkCode = string.Empty;
-                        LinkCodeExpiresAt = 0;
-                        SaveAuth();
-                        StopPolling();
-                        LoadSubmissions();
-                        LastError = string.Empty;
+                        UpdateAuthFromStatus(status, false);
                     }
                     else if (status != null)
                     {
@@ -205,6 +223,130 @@ namespace TheQuartermaster.Client.Services
                 catch (Exception ex)
                 {
                     SetError($"Link status error: {ex.Message}");
+                }
+            });
+        }
+
+        private static void UpdateAuthFromStatus(CommunityLinkStatusResponse status, bool isRefresh)
+        {
+            if (status == null || !status.Linked)
+                return;
+
+            bool firstLink = string.IsNullOrWhiteSpace(IdToken);
+            IdToken = status.IdToken ?? IdToken;
+            DisplayName = status.DisplayName ?? DisplayName;
+            LinkCode = string.Empty;
+            LinkCodeExpiresAt = 0;
+            TokenExpiresAt = ParseTokenExpiry(IdToken);
+            SaveAuth();
+            StartTokenRefresh();
+
+            if (isRefresh)
+            {
+                Plugin.Log.LogInfo("[TheQuartermaster] Discord auth token refreshed.");
+                return;
+            }
+
+            if (firstLink)
+            {
+                StopPolling();
+                OnLinked?.Invoke();
+                LoadSubmissions();
+                LastError = string.Empty;
+            }
+        }
+
+        private static long ParseTokenExpiry(string idToken)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(idToken))
+                    return 0;
+
+                var parts = idToken.Split('.');
+                if (parts.Length < 2)
+                    return 0;
+
+                var payload = parts[1];
+                payload = payload.Replace('-', '+').Replace('_', '/');
+                switch (payload.Length % 4)
+                {
+                    case 2: payload += "=="; break;
+                    case 3: payload += "="; break;
+                }
+
+                var bytes = Convert.FromBase64String(payload);
+                var json = Encoding.UTF8.GetString(bytes);
+                var obj = JObject.Parse(json);
+                var exp = obj["exp"]?.ToObject<long>() ?? 0;
+                return exp * 1000;
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log.LogWarning($"[TheQuartermaster] Failed to parse id_token expiry: {ex.Message}");
+                return 0;
+            }
+        }
+
+        private static long NowMs() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        private static void StartTokenRefresh(long delayMs = -1)
+        {
+            _tokenRefreshTimer?.Dispose();
+            if (!IsLinked)
+                return;
+
+            if (delayMs < 0)
+            {
+                delayMs = TokenExpiresAt - NowMs() - 5 * 60 * 1000; // refresh 5 minutes before expiry
+                if (delayMs < 0) delayMs = 0;
+            }
+
+            _tokenRefreshTimer = new Timer(_ => RefreshToken(), null, TimeSpan.FromMilliseconds(delayMs), Timeout.InfiniteTimeSpan);
+        }
+
+        private static void RefreshToken()
+        {
+            var url = ApiUrl($"link-status?uuid={Uri.EscapeDataString(Uuid)}");
+            if (string.IsNullOrWhiteSpace(url))
+                return;
+
+            Plugin.Log.LogInfo("[TheQuartermaster] Refreshing Discord auth token...");
+            HttpClient.GetAsync(url).ContinueWith((Task<HttpResponseMessage> t) =>
+            {
+                try
+                {
+                    if (t.IsFaulted || t.IsCanceled)
+                    {
+                        Plugin.Log.LogWarning($"[TheQuartermaster] Token refresh failed: {t.Exception?.InnerException?.Message}");
+                        StartTokenRefresh(60 * 1000); // retry in 1 minute
+                        return;
+                    }
+
+                    using var response = t.Result;
+                    var json = response.Content.ReadAsStringAsync().Result;
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        Plugin.Log.LogWarning($"[TheQuartermaster] Token refresh returned {(int)response.StatusCode}: {json}");
+                        StartTokenRefresh(60 * 1000);
+                        return;
+                    }
+
+                    var status = JsonConvert.DeserializeObject<CommunityLinkStatusResponse>(json);
+                    if (status != null && status.Linked)
+                    {
+                        UpdateAuthFromStatus(status, true);
+                    }
+                    else
+                    {
+                        Plugin.Log.LogInfo("[TheQuartermaster] Link status reports not linked, clearing auth.");
+                        Unlink();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Plugin.Log.LogError($"[TheQuartermaster] Token refresh error: {ex.Message}");
+                    StartTokenRefresh(60 * 1000);
                 }
             });
         }
@@ -268,7 +410,7 @@ namespace TheQuartermaster.Client.Services
             });
         }
 
-        public static void CastVote(string submissionId, bool support)
+        public static void CastVote(string submissionId, bool support, Action<JObject> onSuccess = null)
         {
             var url = ApiUrl("contract-vote");
             if (string.IsNullOrWhiteSpace(url) || !IsLinked)
@@ -311,6 +453,7 @@ namespace TheQuartermaster.Client.Services
                             if (result["approval_ratio"] != null)
                                 SelectedSubmission["approval_ratio"] = result["approval_ratio"];
                         }
+                        onSuccess?.Invoke(result);
                         LoadSubmissions();
                         LastError = string.Empty;
                     }
@@ -331,6 +474,7 @@ namespace TheQuartermaster.Client.Services
             public string Uuid { get; set; } = string.Empty;
             public string IdToken { get; set; } = string.Empty;
             public string DisplayName { get; set; } = string.Empty;
+            public long TokenExpiresAt { get; set; }
         }
 
         private class CommunityLinkResponse

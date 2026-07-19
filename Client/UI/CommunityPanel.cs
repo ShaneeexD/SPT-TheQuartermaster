@@ -39,6 +39,9 @@ namespace TheQuartermaster.Client.UI
         private Button _linkButton;
         private TMP_Text _linkButtonText;
 
+        private static readonly Queue<Action> _mainThreadActions = new Queue<Action>();
+        private static readonly object _mainThreadActionsLock = new object();
+
         public Component CurrentTraderScreen { get; set; }
 
         public bool Visible
@@ -62,15 +65,58 @@ namespace TheQuartermaster.Client.UI
             Instance = this;
             DontDestroyOnLoad(gameObject);
             CommunityApiClient.OnStateChanged += OnStateChanged;
+            CommunityApiClient.OnLinked += OnLinked;
         }
 
         private void OnDestroy()
         {
             CommunityApiClient.OnStateChanged -= OnStateChanged;
+            CommunityApiClient.OnLinked -= OnLinked;
+        }
+
+        private void OnLinked()
+        {
+            RunOnMainThread(() =>
+            {
+                if (_currentSubmission != null && _communityScreen != null && _communityScreen.activeSelf)
+                    ShowSubmissionDetails(_currentSubmission);
+            });
         }
 
         private void Update()
         {
+            ProcessMainThreadActions();
+        }
+
+        private static void ProcessMainThreadActions()
+        {
+            Action[] actions;
+            lock (_mainThreadActionsLock)
+            {
+                if (_mainThreadActions.Count == 0)
+                    return;
+                actions = _mainThreadActions.ToArray();
+                _mainThreadActions.Clear();
+            }
+            foreach (var action in actions)
+            {
+                try
+                {
+                    action();
+                }
+                catch (Exception ex)
+                {
+                    Plugin.Log.LogError($"[TheQuartermaster] Main thread action error: {ex.Message}");
+                }
+            }
+        }
+
+        public static void RunOnMainThread(Action action)
+        {
+            if (action == null)
+                return;
+            lock (_mainThreadActionsLock)
+                _mainThreadActions.Enqueue(action);
         }
 
         private void LateUpdate()
@@ -552,6 +598,8 @@ namespace TheQuartermaster.Client.UI
         }
 
         private GameObject _serviceItemTemplate;
+        private GameObject _eftButtonTemplate;
+        private JObject _currentSubmission;
 
         private void BuildCommunityUI(GameObject screenRoot)
         {
@@ -569,10 +617,26 @@ namespace TheQuartermaster.Client.UI
                 return;
             }
 
-            // Hide ArenaEftItemTransferWindow — we don't need it
+            // Grab DealButton from ArenaEftItemTransferWindow as EFT-style button template before hiding it
             var arena = FindChild(services, "ArenaEftItemTransferWindow");
             if (arena != null)
             {
+                var merchantPanel = FindChild(arena, "MerchantPanel");
+                if (merchantPanel != null)
+                {
+                    var buttons = FindChild(merchantPanel, "Buttons");
+                    if (buttons != null)
+                    {
+                        var dealButton = FindChild(buttons, "DealButton");
+                        if (dealButton != null)
+                        {
+                            _eftButtonTemplate = dealButton.gameObject;
+                            Plugin.Log.LogInfo("[TheQuartermaster] Stored DealButton as EFT button template.");
+                            Plugin.Log.LogInfo("[TheQuartermaster] DealButton hierarchy:");
+                            LogHierarchy(dealButton, 0);
+                        }
+                    }
+                }
                 arena.gameObject.SetActive(false);
                 Plugin.Log.LogInfo("[TheQuartermaster] Hidden ArenaEftItemTransferWindow.");
             }
@@ -636,6 +700,20 @@ namespace TheQuartermaster.Client.UI
                         _statusText.text = "Community Contracts";
                         Plugin.Log.LogInfo("[TheQuartermaster] Repurposed ServicesList Header Title as status text.");
                     }
+                }
+
+                // Add Refresh button to the right side of the header (plain simple button that fits)
+                if (header is RectTransform headerRT)
+                {
+                    var refreshBtn = CreateSimpleButton(header, "RefreshButton", "Refresh",
+                        new Vector2(-5, 0), new Vector2(90, 28), new Vector2(1, 0.5f));
+                    var btn = refreshBtn.GetComponent<Button>();
+                    if (btn != null)
+                    {
+                        btn.onClick.RemoveAllListeners();
+                        btn.onClick.AddListener(OnRefreshButtonClicked);
+                    }
+                    Plugin.Log.LogInfo("[TheQuartermaster] Added Refresh button to header.");
                 }
             }
 
@@ -789,12 +867,14 @@ namespace TheQuartermaster.Client.UI
 
         private void ShowSubmissionDetails(JObject submission)
         {
+            _currentSubmission = submission;
             var title = submission["title"]?.ToString() ?? "Untitled";
             var author = submission["created_by"]?.ToString() ?? "Unknown";
             var description = submission["description"]?.ToString() ?? string.Empty;
             var upvotes = submission["upvotes"]?.ToObject<int>() ?? 0;
             var downvotes = submission["downvotes"]?.ToObject<int>() ?? 0;
             var ratio = submission["approval_ratio"]?.ToObject<float>() ?? 0f;
+            var id = submission["id"]?.ToString() ?? string.Empty;
 
             // Show details in the status text
             if (_statusText != null)
@@ -817,8 +897,8 @@ namespace TheQuartermaster.Client.UI
                 _statusText.text = $"{title}\nby {author}  |  Support: {ratio:F0}%  Up: {upvotes}  Down: {downvotes}\n\n{description}{objText}{rewardText}";
             }
 
-            // Replace list with a back button using the ServiceItem template
-            if (_submissionListContainer != null && _serviceItemTemplate != null)
+            // Replace list with action buttons — all EFT style for consistency
+            if (_submissionListContainer != null && _eftButtonTemplate != null)
             {
                 for (int i = _submissionListContainer.childCount - 1; i >= 0; i--)
                 {
@@ -827,30 +907,241 @@ namespace TheQuartermaster.Client.UI
                     Destroy(child.gameObject);
                 }
 
-                var backRow = Instantiate(_serviceItemTemplate, _submissionListContainer, false);
-                backRow.name = "BackRow";
-                backRow.SetActive(true);
+                // Back button (EFT style)
+                var backBtnObj = CreateEftButton(_submissionListContainer, "BackButton", "< Back to list", new Vector2(15, 0), new Vector2(0, 1));
+                WireEftButtonClick(backBtnObj, () => { PopulateSubmissionList(); });
 
-                var serviceName = FindChild(backRow.transform, "ServiceName");
-                if (serviceName != null)
+                // Upvote button (EFT style)
+                var upvoteBtn = CreateEftButton(_submissionListContainer, "UpvoteButton", "Upvote", new Vector2(15, -45), new Vector2(0, 1));
+                WireEftButtonClick(upvoteBtn, () =>
                 {
-                    var nameText = serviceName.GetComponent<TextMeshProUGUI>();
-                    if (nameText != null)
-                        nameText.text = "< Back to list";
+                    if (_currentSubmission != null)
+                    {
+                        var sid = _currentSubmission["id"]?.ToString() ?? "";
+                        CommunityApiClient.CastVote(sid, true, result =>
+                        {
+                            RunOnMainThread(() =>
+                            {
+                                UpdateVoteFromResult(_currentSubmission, result);
+                                ShowSubmissionDetails(_currentSubmission);
+                            });
+                        });
+                        Plugin.Log.LogInfo($"[TheQuartermaster] Upvoted submission {sid}");
+                    }
+                });
+
+                // Downvote button (EFT style, next to upvote)
+                var downvoteBtn = CreateEftButton(_submissionListContainer, "DownvoteButton", "Downvote", new Vector2(145, -45), new Vector2(0, 1));
+                WireEftButtonClick(downvoteBtn, () =>
+                {
+                    if (_currentSubmission != null)
+                    {
+                        var sid = _currentSubmission["id"]?.ToString() ?? "";
+                        CommunityApiClient.CastVote(sid, false, result =>
+                        {
+                            RunOnMainThread(() =>
+                            {
+                                UpdateVoteFromResult(_currentSubmission, result);
+                                ShowSubmissionDetails(_currentSubmission);
+                            });
+                        });
+                        Plugin.Log.LogInfo($"[TheQuartermaster] Downvoted submission {sid}");
+                    }
+                });
+
+                // Link Discord / Unlink button (EFT style, below vote buttons)
+                if (CommunityApiClient.IsLinked)
+                {
+                    var unlinkBtn = CreateEftButton(_submissionListContainer, "UnlinkButton",
+                        "Unlink Discord",
+                        new Vector2(15, -90), new Vector2(0, 1));
+                    WireEftButtonClick(unlinkBtn, () =>
+                    {
+                        CommunityApiClient.Unlink();
+                        ShowSubmissionDetails(_currentSubmission);
+                        Plugin.Log.LogInfo("[TheQuartermaster] Unlinked Discord account.");
+                    });
+                    _linkButtonText = unlinkBtn.GetComponentInChildren<TextMeshProUGUI>(true);
+                }
+                else
+                {
+                    var linkBtn = CreateEftButton(_submissionListContainer, "LinkDiscordButton",
+                        "Link Discord",
+                        new Vector2(15, -90), new Vector2(0, 1));
+                    WireEftButtonClick(linkBtn, OnLinkButtonClicked);
+                    _linkButtonText = linkBtn.GetComponentInChildren<TextMeshProUGUI>(true);
                 }
 
-                var arrow = FindChild(backRow.transform, "SelectedArrow");
-                if (arrow != null) arrow.gameObject.SetActive(false);
-                var iconBg = FindChild(backRow.transform, "ServiceIconBackground");
-                if (iconBg != null) iconBg.gameObject.SetActive(false);
+                Plugin.Log.LogInfo("[TheQuartermaster] Added Back, Upvote, Downvote, and Link/Unlink buttons to detail view.");
+            }
+        }
 
-                var btn = backRow.GetComponent<Button>();
-                if (btn != null)
+        private static void UpdateVoteFromResult(JObject submission, JObject result)
+        {
+            if (result["upvotes"] != null)
+                submission["upvotes"] = result["upvotes"];
+            if (result["downvotes"] != null)
+                submission["downvotes"] = result["downvotes"];
+            if (result["approval_ratio"] != null)
+                submission["approval_ratio"] = result["approval_ratio"];
+        }
+
+        private static void WireEftButtonClick(GameObject btnObj, UnityEngine.Events.UnityAction callback)
+        {
+            var eftBtn = btnObj.GetComponent<DefaultUIButton>();
+            if (eftBtn != null)
+            {
+                eftBtn.OnClick.AddListener(callback);
+                return;
+            }
+            // Fallback to plain Button if available
+            var btn = btnObj.GetComponent<Button>();
+            if (btn == null)
+                btn = btnObj.GetComponentInChildren<Button>(true);
+            if (btn != null)
+            {
+                btn.onClick.RemoveAllListeners();
+                btn.onClick.AddListener(callback);
+            }
+            else
+            {
+                Plugin.Log.LogWarning($"[TheQuartermaster] No clickable component found on '{btnObj.name}'.");
+            }
+        }
+
+        private GameObject CreateEftButton(Transform parent, string name, string label, Vector2 pos, Vector2 anchor)
+        {
+            var btn = Instantiate(_eftButtonTemplate, parent, false);
+            btn.name = name;
+            btn.SetActive(true);
+            var rt = btn.GetComponent<RectTransform>();
+            rt.anchorMin = anchor;
+            rt.anchorMax = anchor;
+            rt.pivot = anchor;
+            rt.sizeDelta = new Vector2(120, 35);
+            rt.anchoredPosition = pos;
+
+            // Remove LayoutElement so our sizeDelta is respected
+            var le = btn.GetComponent<LayoutElement>();
+            if (le != null) Destroy(le);
+
+            // Get the EFT button component and set raw text (no localization)
+            var eftBtn = btn.GetComponent<DefaultUIButton>();
+            if (eftBtn != null)
+            {
+                eftBtn.SetRawText(label, 18);
+                eftBtn.Interactable = true;
+            }
+            else
+            {
+                Plugin.Log.LogWarning($"[TheQuartermaster] No DefaultUIButton on {name}.");
+            }
+
+            // Make sure every TMP label in the button states shows our label (fixes hover text showing old key paths)
+            var allLabels = btn.GetComponentsInChildren<TextMeshProUGUI>(true);
+            foreach (var lbl in allLabels)
+                lbl.text = label;
+
+            // Destroy ALL LocalizedText components recursively so they don't override our labels
+            var allLocTexts = btn.GetComponentsInChildren<LocalizedText>(true);
+            foreach (var lt in allLocTexts)
+                Destroy(lt);
+
+            // Hide extra children that aren't part of the button visual
+            // Keep Default/Hover/Pressed/Disabled state containers and Background/Label
+            var keep = new HashSet<string> { "Default", "Hover", "Pressed", "Disabled", "Background", "Label", "IconContainer" };
+            for (int i = 0; i < btn.transform.childCount; i++)
+            {
+                var child = btn.transform.GetChild(i);
+                if (!keep.Contains(child.name))
                 {
-                    btn.onClick.RemoveAllListeners();
-                    btn.onClick.AddListener(() => { PopulateSubmissionList(); });
+                    child.gameObject.SetActive(false);
+                    Plugin.Log.LogInfo($"[TheQuartermaster] Hidden extra child '{child.name}' on {name}.");
                 }
             }
+
+            // Inside state containers, hide TooltipTarget/Pattern/Icon if present
+            foreach (Transform state in btn.transform)
+            {
+                HideNamedChildren(state, new[] { "TooltipTarget", "Pattern", "Icon", "SizeLabel" });
+            }
+
+            Plugin.Log.LogInfo($"[TheQuartermaster] Created EFT button '{name}' with label '{label}'.");
+            return btn;
+        }
+
+        private GameObject CreateSimpleButton(Transform parent, string name, string label, Vector2 pos, Vector2 size, Vector2 anchor)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(parent, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = anchor;
+            rt.anchorMax = anchor;
+            rt.pivot = anchor;
+            rt.sizeDelta = size;
+            rt.anchoredPosition = pos;
+
+            var img = go.GetComponent<Image>();
+            img.color = new Color32(45, 45, 45, 230);
+
+            var txtGO = new GameObject("Text", typeof(RectTransform), typeof(Text));
+            txtGO.transform.SetParent(go.transform, false);
+            var tRT = txtGO.GetComponent<RectTransform>();
+            tRT.anchorMin = Vector2.zero;
+            tRT.anchorMax = Vector2.one;
+            tRT.offsetMin = Vector2.zero;
+            tRT.offsetMax = Vector2.zero;
+
+            var txt = txtGO.GetComponent<Text>();
+            txt.text = label;
+            txt.color = new Color32(220, 220, 220, 255);
+            txt.alignment = TextAnchor.MiddleCenter;
+            txt.fontSize = 14;
+            if (_statusText != null)
+                txt.font = _statusText.font;
+
+            var btn = go.GetComponent<Button>();
+            btn.targetGraphic = img;
+            var cb = btn.colors;
+            cb.normalColor = new Color32(60, 60, 60, 255);
+            cb.highlightedColor = new Color32(80, 80, 80, 255);
+            cb.pressedColor = new Color32(40, 40, 40, 255);
+            cb.disabledColor = new Color32(30, 30, 30, 128);
+            cb.colorMultiplier = 1f;
+            cb.fadeDuration = 0.1f;
+            btn.colors = cb;
+
+            return go;
+        }
+
+        private static void HideNamedChildren(Transform t, string[] names)
+        {
+            for (int i = 0; i < t.childCount; i++)
+            {
+                var child = t.GetChild(i);
+                if (names.Contains(child.name))
+                    child.gameObject.SetActive(false);
+                HideNamedChildren(child, names);
+            }
+        }
+
+        private static void SetServiceItemText(GameObject row, string text)
+        {
+            var serviceName = FindChild(row.transform, "ServiceName");
+            if (serviceName != null)
+            {
+                var nameText = serviceName.GetComponent<TextMeshProUGUI>();
+                if (nameText != null)
+                    nameText.text = text;
+            }
+        }
+
+        private static void HideServiceItemDecorations(GameObject row)
+        {
+            var arrow = FindChild(row.transform, "SelectedArrow");
+            if (arrow != null) arrow.gameObject.SetActive(false);
+            var iconBg = FindChild(row.transform, "ServiceIconBackground");
+            if (iconBg != null) iconBg.gameObject.SetActive(false);
         }
 
         private void OnRefreshButtonClicked()
@@ -879,7 +1170,10 @@ namespace TheQuartermaster.Client.UI
         private void UpdateLinkButton()
         {
             if (_linkButtonText == null) return;
-            _linkButtonText.text = CommunityApiClient.IsLinked ? $"Linked: {CommunityApiClient.DisplayName}" : "Link Discord";
+            if (CommunityApiClient.IsLinked)
+                _linkButtonText.text = "Unlink Discord";
+            else
+                _linkButtonText.text = "Link Discord";
         }
 
         private static long UnixMs()
