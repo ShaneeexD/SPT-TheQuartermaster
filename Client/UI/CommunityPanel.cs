@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json.Linq;
 using TheQuartermaster.Client.Services;
+using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace TheQuartermaster.Client.UI
 {
@@ -17,6 +19,8 @@ namespace TheQuartermaster.Client.UI
         private string _errorMessage = string.Empty;
         private float _lastSubmissionsRefresh = -999f;
         private const float SubmissionRefreshSeconds = 60f;
+        private GameObject _communityTab;
+        private float _lastTabSearch = -999f;
 
         public bool Visible
         {
@@ -54,6 +58,8 @@ namespace TheQuartermaster.Client.UI
             {
                 Visible = !Visible;
             }
+
+            TryAttachCommunityTab();
         }
 
         private void OnStateChanged()
@@ -278,6 +284,74 @@ namespace TheQuartermaster.Client.UI
             else
             {
                 GUILayout.Label(rewards.ToString(), "box");
+            }
+        }
+
+        private void TryAttachCommunityTab()
+        {
+            if (_communityTab != null)
+                return;
+
+            if (Time.time - _lastTabSearch < 2f)
+                return;
+            _lastTabSearch = Time.time;
+
+            try
+            {
+                GameObject services = null;
+
+                // Search both active scene paths and loaded objects (works when the trader UI is inactive).
+                var all = Resources.FindObjectsOfTypeAll<GameObject>();
+                foreach (var go in all)
+                {
+                    if (go == null || go.name != "Services")
+                        continue;
+
+                    var p1 = go.transform.parent;
+                    var p2 = p1?.parent;
+                    var p3 = p2?.parent;
+                    if (p1?.name == "Tabs" && p2?.name == "Tab Bar" && p3?.name == "Trader Screens Group")
+                    {
+                        services = go;
+                        break;
+                    }
+                }
+
+                if (services == null)
+                {
+                    Plugin.Log.LogWarning("[TheQuartermaster] Could not find 'Trader Screens Group/Tab Bar/Tabs/Services' to clone.");
+                    return;
+                }
+
+                var tabs = services.transform.parent;
+                var clone = Instantiate(services, tabs);
+                clone.name = "CommunityTab";
+                clone.transform.SetAsLastSibling();
+
+                var text = clone.GetComponentInChildren<TMP_Text>(true);
+                if (text != null)
+                    text.text = "Community";
+
+                var button = clone.GetComponent<Button>();
+                if (button != null)
+                {
+                    button.onClick.RemoveAllListeners();
+                    button.onClick.AddListener(() => { Visible = !Visible; });
+                }
+
+                var toggle = clone.GetComponent<Toggle>();
+                if (toggle != null)
+                {
+                    toggle.onValueChanged.RemoveAllListeners();
+                    toggle.onValueChanged.AddListener(isOn => { if (isOn) Visible = true; });
+                }
+
+                _communityTab = clone;
+                Plugin.Log.LogInfo("[TheQuartermaster] Injected Community tab into trader tab bar.");
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log.LogError($"[TheQuartermaster] Failed to inject Community tab: {ex.Message}");
             }
         }
 

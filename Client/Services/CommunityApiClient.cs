@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Threading;
@@ -115,7 +116,7 @@ namespace TheQuartermaster.Client.Services
             var body = JsonConvert.SerializeObject(new { uuid = Uuid });
             var content = new StringContent(body, Encoding.UTF8, "application/json");
 
-            HttpClient.PostAsync(url, content).ContinueWith(t =>
+            HttpClient.PostAsync(url, content).ContinueWith((Task<HttpResponseMessage> t) =>
             {
                 try
                 {
@@ -165,7 +166,7 @@ namespace TheQuartermaster.Client.Services
             if (string.IsNullOrWhiteSpace(url))
                 return;
 
-            HttpClient.GetAsync(url).ContinueWith(t =>
+            HttpClient.GetAsync(url).ContinueWith((Task<HttpResponseMessage> t) =>
             {
                 try
                 {
@@ -217,13 +218,17 @@ namespace TheQuartermaster.Client.Services
                 return;
             }
 
-            HttpClient.GetAsync(url).ContinueWith(t =>
+            Plugin.Log.LogInfo($"[TheQuartermaster] Loading community submissions from {url}");
+
+            HttpClient.GetAsync(url).ContinueWith((Task<HttpResponseMessage> t) =>
             {
                 try
                 {
                     if (t.IsFaulted || t.IsCanceled)
                     {
-                        SetError(t.Exception?.InnerException?.Message ?? "Failed to load submissions.");
+                        var message = t.Exception?.InnerException?.Message ?? "Failed to load submissions.";
+                        Plugin.Log.LogError($"[TheQuartermaster] Submissions request failed: {message}");
+                        SetError(message);
                         return;
                     }
 
@@ -231,11 +236,19 @@ namespace TheQuartermaster.Client.Services
                     var json = response.Content.ReadAsStringAsync().Result;
                     if (!response.IsSuccessStatusCode)
                     {
+                        Plugin.Log.LogError($"[TheQuartermaster] Submissions returned {(int)response.StatusCode}: {json}");
                         SetError($"Failed to load submissions: {(int)response.StatusCode} {json}");
                         return;
                     }
 
                     var doc = JObject.Parse(json);
+                    if (doc["submissions"] == null)
+                    {
+                        Plugin.Log.LogWarning($"[TheQuartermaster] Submissions cache missing 'submissions' key. Keys: {string.Join(", ", doc.Properties().Select(p => p.Name))}");
+                        SetError("Submissions cache missing 'submissions' key.");
+                        return;
+                    }
+
                     var items = doc["submissions"] as JArray ?? new JArray();
                     Submissions.Clear();
                     foreach (var item in items)
@@ -244,9 +257,11 @@ namespace TheQuartermaster.Client.Services
                             Submissions.Add(obj);
                     }
                     LastError = string.Empty;
+                    Plugin.Log.LogInfo($"[TheQuartermaster] Loaded {Submissions.Count} pending submissions.");
                 }
                 catch (Exception ex)
                 {
+                    Plugin.Log.LogError($"[TheQuartermaster] Load submissions error: {ex.Message}");
                     SetError($"Load submissions error: {ex.Message}");
                 }
                 OnStateChanged?.Invoke();
@@ -272,7 +287,7 @@ namespace TheQuartermaster.Client.Services
             request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", IdToken);
             request.Content = new StringContent(body, Encoding.UTF8, "application/json");
 
-            HttpClient.SendAsync(request).ContinueWith(t =>
+            HttpClient.SendAsync(request).ContinueWith((Task<HttpResponseMessage> t) =>
             {
                 try
                 {
