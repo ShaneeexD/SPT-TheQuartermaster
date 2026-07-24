@@ -281,29 +281,7 @@ public class CommunityContractService(
                         Items = null,
                     };
 
-                    var dialogueData = saveServer.GetProfile(sessionId).DialogueRecords;
-                    if (dialogueData is not null)
-                    {
-                        if (dialogueData.TryGetValue(traderId, out var dialog))
-                        {
-                            dialog.New += 1;
-                            dialog.Messages?.Add(message);
-                        }
-                        else
-                        {
-                            dialogueData[traderId] = new Dialogue
-                            {
-                                Id = traderId,
-                                Type = MessageType.NpcTraderMessage,
-                                Messages = [message],
-                                Pinned = false,
-                                New = 1,
-                                AttachmentsNew = 0,
-                                Users = null,
-                            };
-                        }
-                    }
-
+                    // Avoid manually mutating DialogueRecords; malformed entries can break mail attachment claims.
                     var notification = new WsChatMessageReceived
                     {
                         EventType = NotificationEventType.new_message,

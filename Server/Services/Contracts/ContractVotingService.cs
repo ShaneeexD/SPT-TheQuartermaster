@@ -11,8 +11,7 @@ namespace TheQuartermaster.Server.Services.Contracts;
 public class ContractVotingService(
     ISptLogger<ContractVotingService> logger,
     BackendConfigService backendConfigService,
-    FirestoreContractService firestoreContractService,
-    ContractValidationService contractValidationService
+    FirestoreContractService firestoreContractService
 )
 {
     public async Task ProcessPendingSubmissionsAsync()
@@ -51,17 +50,6 @@ public class ContractVotingService(
             return;
         }
 
-        var validation = contractValidationService.Validate(submission);
-        if (!validation.IsValid)
-        {
-            submission.Status = ContractStatus.Rejected;
-            submission.RejectedAt = nowTimestamp;
-            submission.ValidationErrors = validation.Errors;
-            submission.UpdatedAt = nowTimestamp;
-            await firestoreContractService.UpdateSubmissionAsync(submission);
-            logger.DebugInfo($"[TheQuartermaster] Submission {submission.Id} rejected (validation failed).");
-            return;
-        }
 
         if (submission.AdminCreated)
         {
