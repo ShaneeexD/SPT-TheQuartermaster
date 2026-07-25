@@ -21,7 +21,7 @@ public record QuartermasterMetadata : AbstractModMetadata
     public override string Name { get; init; } = "The Quartermaster";
     public override string Author { get; init; } = "ShaneeexD";
     public override List<string>? Contributors { get; init; } = null;
-    public override Version Version { get; init; } = new Version("1.2.1");
+    public override Version Version { get; init; } = new Version("1.2.2");
     public override Range SptVersion { get; init; } = new Range("~4.0.13");
     public override List<string>? Incompatibilities { get; init; } = null;
     public override Dictionary<string, Range>? ModDependencies { get; init; } = null;
@@ -94,6 +94,10 @@ public class QuartermasterPlugin(
             await marketplaceService.InitialiseAsync();
             await backendConfigService.LoadAsync();
             await listingConfigService.LoadAsync();
+
+            // Ensure the Tier 4 reward crate template exists in the item DB before any profile loads.
+            communityRewardService.ResolveTemplateId(4);
+
             await traderService.RegisterTrader(_modPath);
 
             // Initial population: pull approved contracts from the workshop, schedule active slots,

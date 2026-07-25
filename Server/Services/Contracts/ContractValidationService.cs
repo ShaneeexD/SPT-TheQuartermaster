@@ -31,6 +31,28 @@ public class ContractValidationService()
         "sandbox_high"
     };
 
+    private static readonly HashSet<string> ValidEnemyTargets = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Savage",
+        "AnyPmc",
+        "Any",
+        "exUsec",
+        "pmcBot",
+        "sectantPriest",
+        "sectantWarrior",
+        "bossKnight",
+        "bossBully",
+        "bossKilla",
+        "bossKojaniy",
+        "bossSanitar",
+        "bossTagilla",
+        "bossGluhar",
+        "bossZryachiy",
+        "bossBoar",
+        "bossPartisan",
+        "bossKolontay"
+    };
+
     private const int MaxTitleLength = 100;
     private const int MaxDescriptionLength = 2000;
     private const int MaxObjectiveCount = 100;
@@ -202,14 +224,12 @@ public class ContractValidationService()
                 errors.Add($"Objective count must be positive at index {i}.");
             }
 
-            // Generic objective count check is handled by type-specific limits below
-
             if (objective.Type is ContractObjectiveType.HandOverItem or ContractObjectiveType.HandOverFirItem)
             {
                 hasHandover = true;
                 if (objective.Count > MaxHandoverCount)
                 {
-                    errors.Add($"Handover count at index {i} cannot exceed {MaxHandoverCount}.");
+                    errors.Add($"Hand over count at index {i} cannot exceed {MaxHandoverCount}.");
                 }
 
                 if (string.IsNullOrWhiteSpace(objective.TargetTpl) || !MongoId.IsValidMongoId(objective.TargetTpl))
@@ -223,7 +243,21 @@ public class ContractValidationService()
                 }
             }
 
-            if (objective.Type is ContractObjectiveType.KillScavs or ContractObjectiveType.KillPmcs or ContractObjectiveType.KillBoss)
+            if (objective.Type == ContractObjectiveType.FindItem)
+            {
+                hasHandover = true;
+                if (objective.Count > MaxHandoverCount)
+                {
+                    errors.Add($"Find item count at index {i} cannot exceed {MaxHandoverCount}.");
+                }
+
+                if (string.IsNullOrWhiteSpace(objective.TargetTpl) || !MongoId.IsValidMongoId(objective.TargetTpl))
+                {
+                    errors.Add($"Find item objective at index {i} requires a valid item template.");
+                }
+            }
+
+            if (objective.Type is ContractObjectiveType.KillScavs or ContractObjectiveType.KillPmcs or ContractObjectiveType.KillBoss or ContractObjectiveType.KillEnemy)
             {
                 hasKill = true;
                 if (objective.Count > MaxKillCount)
@@ -232,7 +266,7 @@ public class ContractValidationService()
                 }
             }
 
-            if (objective.Type is ContractObjectiveType.KillScavs or ContractObjectiveType.KillPmcs or ContractObjectiveType.KillBoss or ContractObjectiveType.SurviveMap or ContractObjectiveType.ExtractMap)
+            if (objective.Type is ContractObjectiveType.KillScavs or ContractObjectiveType.KillPmcs or ContractObjectiveType.KillBoss or ContractObjectiveType.KillEnemy or ContractObjectiveType.SurviveMap or ContractObjectiveType.ExtractMap)
             {
                 if (!string.IsNullOrWhiteSpace(objective.TargetMap) && !ValidMaps.Contains(objective.TargetMap))
                 {
@@ -245,17 +279,91 @@ public class ContractValidationService()
                 errors.Add($"Boss kill objective at index {i} requires a target faction/boss tag.");
             }
 
+            if (objective.Type == ContractObjectiveType.KillEnemy)
+            {
+                if (string.IsNullOrWhiteSpace(objective.Target))
+                {
+                    errors.Add($"Kill enemy objective at index {i} requires a target.");
+                }
+                else if (!ValidEnemyTargets.Contains(objective.Target))
+                {
+                    errors.Add($"Invalid kill enemy target at index {i}: {objective.Target}.");
+                }
+            }
+
             if (objective.Type is ContractObjectiveType.SurviveMap or ContractObjectiveType.ExtractMap && string.IsNullOrWhiteSpace(objective.TargetMap))
             {
                 errors.Add($"{objective.Type} objective at index {i} requires a target map.");
+            }
+
+            if (objective.MinDistance.HasValue && objective.MinDistance.Value < 0)
+            {
+                errors.Add($"min_distance at index {i} must be >= 0.");
+            }
+
+            if (objective.MaxDistance.HasValue && objective.MaxDistance.Value < 0)
+            {
+                errors.Add($"max_distance at index {i} must be >= 0.");
+            }
+
+            if (objective.MinDistance.HasValue && objective.MaxDistance.HasValue)
+            {
+                errors.Add($"Objective at index {i} cannot set both min_distance and max_distance.");
+            }
+
+            if (objective.TimeFrom.HasValue && (objective.TimeFrom.Value < 0 || objective.TimeFrom.Value > 23))
+            {
+                errors.Add($"time_from at index {i} must be between 0 and 23.");
+            }
+
+            if (objective.TimeTo.HasValue && (objective.TimeTo.Value < 0 || objective.TimeTo.Value > 23))
+            {
+                errors.Add($"time_to at index {i} must be between 0 and 23.");
+            }
+
+            foreach (var wtpl in objective.WeaponTpls ?? [])
+            {
+                if (string.IsNullOrWhiteSpace(wtpl) || !MongoId.IsValidMongoId(wtpl))
+                {
+                    errors.Add($"Invalid weapon template at index {i}: {wtpl}.");
+                    break;
+                }
+            }
+
+            foreach (var tpl in objective.Wearing ?? [])
+            {
+                if (string.IsNullOrWhiteSpace(tpl) || !MongoId.IsValidMongoId(tpl))
+                {
+                    errors.Add($"Invalid wearing template at index {i}: {tpl}.");
+                    break;
+                }
+            }
+
+            foreach (var tpl in objective.NotWearing ?? [])
+            {
+                if (string.IsNullOrWhiteSpace(tpl) || !MongoId.IsValidMongoId(tpl))
+                {
+                    errors.Add($"Invalid not_wearing template at index {i}: {tpl}.");
+                    break;
+                }
+            }
+
+            if (objective.BodyPart?.Count > 0)
+            {
+                foreach (var bp in objective.BodyPart)
+                {
+                    if (string.IsNullOrWhiteSpace(bp))
+                    {
+                        errors.Add($"Body part at index {i} cannot be empty.");
+                        break;
+                    }
+                }
             }
         }
 
         if (hasHandover && hasKill)
         {
-            // This is not strictly impossible in SPT, but the prompt asks to flag unsupported combinations.
-            // We will allow mixed objective types but warn if the quest builder cannot represent them.
-            // For now, no error here unless we later add a restriction.
+            // Allow mixed handover/find and kill objectives. Quest builder now supports both.
         }
     }
 }

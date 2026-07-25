@@ -154,7 +154,7 @@ public class CommunityRewardService(
         }
     }
 
-    private string ResolveTemplateId(int tier)
+    public string ResolveTemplateId(int tier)
     {
         if (tier == 4)
         {

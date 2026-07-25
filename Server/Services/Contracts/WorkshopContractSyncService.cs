@@ -450,8 +450,24 @@ public class WorkshopContractSyncService(
                 TargetMap = GetString(obj, "target_map"),
                 TargetZone = GetString(obj, "target_zone"),
                 TargetFaction = GetString(obj, "target_faction"),
+                Target = GetString(obj, "target"),
                 Count = GetPositiveInt(obj, "count", 1),
-                RequiredInRaid = GetBool(obj, "required_in_raid")
+                RequiredInRaid = GetBool(obj, "required_in_raid"),
+                WeaponTpls = MapStringArray(obj, "weapon_tpls"),
+                Wearing = MapStringArray(obj, "wearing"),
+                NotWearing = MapStringArray(obj, "not_wearing"),
+                BodyPart = MapStringArray(obj, "body_part"),
+                MinDistance = GetInt(obj, "min_distance"),
+                MaxDistance = GetInt(obj, "max_distance"),
+                TimeFrom = GetInt(obj, "time_from"),
+                TimeTo = GetInt(obj, "time_to"),
+                OneSessionOnly = GetBool(obj, "one_session_only"),
+                CountInRaid = GetBool(obj, "count_in_raid"),
+                HandoverAfterFind = GetBool(obj, "handover_after_find"),
+                ZoneId = GetString(obj, "zone_id"),
+                PlantItemTpl = GetString(obj, "plant_item_tpl"),
+                PlantTime = GetInt(obj, "plant_time"),
+                RequiredExtract = GetString(obj, "required_extract")
             });
         }
 
