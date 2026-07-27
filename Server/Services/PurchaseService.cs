@@ -66,12 +66,7 @@ public class PurchaseService(
         var stackInfo = traderService.GetStackInfoForAssortItem(itemId);
         if (stackInfo is null || stackInfo.Allocations.Count == 0)
         {
-            httpResponseUtil.AppendErrorToOutput(
-                output,
-                "[TheQuartermaster] Listing not found for selected item.",
-                BackendErrorCodes.OfferNotFound
-            );
-            return false;
+            return await PurchaseHardcodedItem(pmcData, buyRequestData, sessionID, foundInRaid, output);
         }
 
         var count = buyRequestData.Count.GetValueOrDefault();
@@ -247,6 +242,97 @@ public class PurchaseService(
         catch (Exception ex)
         {
             logger.Error($"[TheQuartermaster] Purchase failed: {ex.Message}", ex);
+            httpResponseUtil.AppendErrorToOutput(
+                output,
+                "[TheQuartermaster] Purchase failed.",
+                BackendErrorCodes.UnknownTradingError
+            );
+            return false;
+        }
+    }
+
+    private async Task<bool> PurchaseHardcodedItem(
+        PmcData pmcData,
+        ProcessBuyTradeRequestData buyRequestData,
+        MongoId sessionID,
+        bool foundInRaid,
+        ItemEventRouterResponse output
+    )
+    {
+        var assortItem = traderService.GetAssortItem(buyRequestData.ItemId);
+        if (assortItem is null)
+        {
+            httpResponseUtil.AppendErrorToOutput(
+                output,
+                "[TheQuartermaster] Item not found in trader assort.",
+                BackendErrorCodes.OfferNotFound
+            );
+            return false;
+        }
+
+        var count = buyRequestData.Count.GetValueOrDefault();
+        if (count <= 0)
+        {
+            count = 1;
+        }
+
+        try
+        {
+            var salesSumBefore = pmcData.TradersInfo?.TryGetValue(QuartermasterConstants.TraderId, out var traderInfoBefore) == true
+                ? traderInfoBefore.SalesSum.GetValueOrDefault()
+                : 0;
+
+            paymentService.PayMoney(pmcData, buyRequestData, sessionID, output);
+            if (output.Warnings?.Count > 0)
+            {
+                return false;
+            }
+
+            var salesSumAfter = pmcData.TradersInfo?.TryGetValue(QuartermasterConstants.TraderId, out var traderInfoAfter) == true
+                ? traderInfoAfter.SalesSum.GetValueOrDefault()
+                : 0;
+            var totalPrice = salesSumAfter - salesSumBefore;
+            if (totalPrice > 0)
+            {
+                await realtimeDatabaseService.IncrementCommunitySpendingAsync(sessionID, totalPrice);
+            }
+
+            var deliveredTree = new List<Item>
+            {
+                new()
+                {
+                    Id = new MongoId(),
+                    Template = assortItem.Template,
+                    SlotId = "hideout",
+                    Upd = new Upd
+                    {
+                        StackObjectsCount = count,
+                        SpawnedInSession = foundInRaid
+                    }
+                }
+            };
+
+            var addRequest = new AddItemsDirectRequest
+            {
+                ItemsWithModsToAdd = [deliveredTree],
+                FoundInRaid = foundInRaid,
+                Callback = null,
+                UseSortingTable = false
+            };
+            inventoryHelper.AddItemsToStash(sessionID, addRequest, pmcData, output);
+            if (output.Warnings?.Count > 0)
+            {
+                return false;
+            }
+
+            TrackPurchase(sessionID, QuartermasterConstants.TraderId, buyRequestData.ItemId, count);
+
+            logger.DebugInfo($"[TheQuartermaster] Player {sessionID} purchased {count} of hardcoded item {assortItem.Template}.");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Hardcoded purchase failed: {ex.Message}", ex);
             httpResponseUtil.AppendErrorToOutput(
                 output,
                 "[TheQuartermaster] Purchase failed.",

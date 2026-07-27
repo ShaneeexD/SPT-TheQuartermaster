@@ -114,6 +114,20 @@ public class TraderService(
         return info;
     }
 
+    public Item? GetAssortItem(MongoId assortItemId)
+    {
+        return _trader?.Assort?.Items?.FirstOrDefault(i => i.Id == assortItemId);
+    }
+
+    public List<List<BarterScheme>>? GetBarterSchemeForAssortItem(MongoId assortItemId)
+    {
+        if (_trader?.Assort?.BarterScheme?.TryGetValue(assortItemId, out var scheme) == true)
+        {
+            return scheme;
+        }
+        return null;
+    }
+
     public List<AssortListingAllocation>? GetAllocationsForAssortItem(MongoId assortItemId)
     {
         return GetStackInfoForAssortItem(assortItemId)?.Allocations;
@@ -454,7 +468,42 @@ public class TraderService(
             AddSingleItem(assort, entry, markup, loyaltyLevel);
         }
 
+        AddHardcodedItems(assort);
+
         return assort;
+    }
+
+    private void AddHardcodedItems(TraderAssort assort)
+    {
+        var hardcodedItems = new (string Tpl, int Price, int LoyaltyLevel)[]
+        {
+            (QuartermasterConstants.HardcodedAssort.QmLogisticsCaseTpl,
+             QuartermasterConstants.HardcodedAssort.QmLogisticsCasePrice,
+             QuartermasterConstants.HardcodedAssort.QmLogisticsCaseLoyaltyLevel)
+        };
+
+        foreach (var (tpl, price, loyaltyLevel) in hardcodedItems)
+        {
+            var assortId = new MongoId();
+            assort.Items.Add(new Item
+            {
+                Id = assortId,
+                Template = tpl,
+                SlotId = "hideout",
+                Upd = new Upd
+                {
+                    StackObjectsCount = 999999,
+                    BuyRestrictionMax = 0,
+                    BuyRestrictionCurrent = 0,
+                    UnlimitedCount = true
+                }
+            });
+            assort.BarterScheme[assortId] =
+            [
+                [new BarterScheme { Template = Money.ROUBLES, Count = price }]
+            ];
+            assort.LoyalLevelItems[assortId] = loyaltyLevel;
+        }
     }
 
     private bool IsItemStackable(string? tpl)

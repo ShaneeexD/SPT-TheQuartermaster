@@ -56,8 +56,8 @@ public static class QuartermasterConstants
 
     public static class Versions
     {
-        public static readonly Version Current = new Version("1.2.2");
-        public const string CurrentString = "1.2.2";
+        public static readonly Version Current = new Version("1.3.0");
+        public const string CurrentString = "1.3.0";
     }
 
     public static class FirestoreCollections
@@ -77,6 +77,13 @@ public static class QuartermasterConstants
         public const string ContractVersion = "contract_version";
         public const string ModVersion = "mod_version";
         public const string ListingConfig = "listing_config";
+    }
+
+    public static class HardcodedAssort
+    {
+        public const string QmLogisticsCaseTpl = "fbde5d40474dbc5f02f33abe";
+        public const int QmLogisticsCasePrice = 1500000;
+        public const int QmLogisticsCaseLoyaltyLevel = 4;
     }
 
     public static class Scavenged
