@@ -23,6 +23,7 @@ namespace TheQuartermaster.Client.Services
         private static string _localSubmissionsPath = string.Empty;
         private static Timer _pollTimer;
         private static Timer _tokenRefreshTimer;
+        private static readonly object SubmissionsLock = new object();
 
         public static string Uuid { get; private set; } = string.Empty;
         public static string IdToken { get; private set; } = string.Empty;
@@ -36,6 +37,14 @@ namespace TheQuartermaster.Client.Services
 
         public static List<JObject> Submissions { get; } = new List<JObject>();
         public static JObject SelectedSubmission { get; set; }
+
+        public static List<JObject> GetSubmissionsSnapshot()
+        {
+            lock (SubmissionsLock)
+            {
+                return new List<JObject>(Submissions);
+            }
+        }
 
         public static event Action OnStateChanged;
         public static event Action OnLinked;
@@ -63,10 +72,29 @@ namespace TheQuartermaster.Client.Services
                 }
 
                 var gameRoot = dir?.Parent?.FullName;
-                if (!string.IsNullOrWhiteSpace(gameRoot))
+                if (string.IsNullOrWhiteSpace(gameRoot))
+                    return string.Empty;
+
+                // Standard layout: gameRoot/user/mods/TheQuartermaster/client_submissions.json
+                var directPath = Path.Combine(gameRoot, "user", "mods", "TheQuartermaster", "client_submissions.json");
+                if (File.Exists(directPath))
+                    return directPath;
+
+                // Nested server layout: gameRoot/SPT/user/mods/TheQuartermaster/client_submissions.json
+                // (some installs place the dedicated server one folder deeper than BepInEx/client files)
+                try
                 {
-                    return Path.Combine(gameRoot, "user", "mods", "TheQuartermaster", "client_submissions.json");
+                    foreach (var subDir in new DirectoryInfo(gameRoot).GetDirectories())
+                    {
+                        var candidate = Path.Combine(subDir.FullName, "user", "mods", "TheQuartermaster", "client_submissions.json");
+                        if (File.Exists(candidate))
+                            return candidate;
+                    }
                 }
+                catch { }
+
+                // Return the standard path even if it doesn't exist yet; LoadSubmissions will fall back to HTTP if missing.
+                return directPath;
             }
             catch { }
             return string.Empty;
@@ -387,9 +415,12 @@ namespace TheQuartermaster.Client.Services
                         var json = File.ReadAllText(localPath);
                         var doc = JObject.Parse(json);
                         var items = doc["submissions"] as JArray ?? new JArray();
-                        Submissions.Clear();
-                        foreach (var item in items.OfType<JObject>())
-                            Submissions.Add(item);
+                        lock (SubmissionsLock)
+                        {
+                            Submissions.Clear();
+                            foreach (var item in items.OfType<JObject>())
+                                Submissions.Add(item);
+                        }
                         LastError = string.Empty;
                         Plugin.Log.LogInfo($"[TheQuartermaster] Loaded {Submissions.Count} pending submissions from local server file.");
                     }
@@ -441,11 +472,14 @@ namespace TheQuartermaster.Client.Services
                     }
 
                     var items = doc["submissions"] as JArray ?? new JArray();
-                    Submissions.Clear();
-                    foreach (var item in items)
+                    lock (SubmissionsLock)
                     {
-                        if (item is JObject obj)
-                            Submissions.Add(obj);
+                        Submissions.Clear();
+                        foreach (var item in items)
+                        {
+                            if (item is JObject obj)
+                                Submissions.Add(obj);
+                        }
                     }
                     LastError = string.Empty;
                     Plugin.Log.LogInfo($"[TheQuartermaster] Loaded {Submissions.Count} pending submissions.");

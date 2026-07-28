@@ -8,6 +8,7 @@ using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.Helpers;
 using SPTarkov.Server.Core.Models.Common;
 using SPTarkov.Server.Core.Models.Utils;
+using SPTarkov.Server.Core.Services;
 using TheQuartermaster.Server.Models;
 using TheQuartermaster.Server.Models.Contracts;
 using TheQuartermaster.Server.Models.Rewards;
@@ -77,7 +78,8 @@ public class ListingConfigData
 public class ContractFileService(
     ISptLogger<ContractFileService> logger,
     ConfigService configService,
-    ItemHelper itemHelper
+    ItemHelper itemHelper,
+    DatabaseService databaseService
 )
 {
     private readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(15) };
@@ -295,10 +297,31 @@ public class ContractFileService(
 
         try
         {
-            var result = itemHelper.GetItem(new MongoId(tpl));
-            if (result.Value is not null && !string.IsNullOrWhiteSpace(result.Value.Name))
+            var locales = databaseService.GetTables().Locales.Global;
+            if (locales.TryGetValue("en", out var enLocale))
             {
-                return result.Value.Name;
+                var localeDict = enLocale.Value;
+                if (localeDict is not null)
+                {
+                    if (localeDict.TryGetValue($"{tpl} Name", out var name) && !string.IsNullOrWhiteSpace(name))
+                        return name;
+                    if (localeDict.TryGetValue($"{tpl} ShortName", out var shortName) && !string.IsNullOrWhiteSpace(shortName))
+                        return shortName;
+                }
+            }
+        }
+        catch { }
+
+        try
+        {
+            var result = itemHelper.GetItem(new MongoId(tpl));
+            var props = result.Value?.Properties;
+            if (props is not null)
+            {
+                if (!string.IsNullOrWhiteSpace(props.Name))
+                    return props.Name;
+                if (!string.IsNullOrWhiteSpace(props.ShortName))
+                    return props.ShortName;
             }
         }
         catch { }
@@ -308,11 +331,6 @@ public class ContractFileService(
 
     private (string Text, string Icon) BuildObjectiveDisplay(ContractObjective objective)
     {
-        if (!string.IsNullOrWhiteSpace(objective.Description))
-        {
-            return (objective.Description, ObjectiveIconForType(objective.Type));
-        }
-
         var count = Math.Max(objective.Count, 1);
         var map = ContractQuestBuilder.ToDisplayName(objective.TargetMap);
         var itemName = ResolveItemName(objective.TargetTpl);
@@ -323,6 +341,17 @@ public class ContractFileService(
 
         var locationSuffix = map != "Tarkov" ? $" on {map}" : string.Empty;
         var zoneSuffix = string.IsNullOrWhiteSpace(zone) ? string.Empty : $" in {zone}";
+
+        if (!string.IsNullOrWhiteSpace(objective.Description))
+        {
+            var desc = objective.Description.Trim();
+            var suffix = $"{locationSuffix}{zoneSuffix}";
+            if (count > 1 && !desc.Contains($"x{count}") && !desc.Contains($" {count} "))
+            {
+                suffix = $" x{count}{suffix}";
+            }
+            return ($"{desc}{suffix}", ObjectiveIconForType(objective.Type));
+        }
 
         switch (objective.Type)
         {

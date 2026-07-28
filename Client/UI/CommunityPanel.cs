@@ -855,7 +855,7 @@ namespace TheQuartermaster.Client.UI
                 Destroy(child.gameObject);
             }
 
-            var submissions = CommunityApiClient.Submissions;
+            var submissions = CommunityApiClient.GetSubmissionsSnapshot();
             if (submissions.Count == 0)
             {
                 if (_statusText != null)
