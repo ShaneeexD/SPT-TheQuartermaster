@@ -484,26 +484,36 @@ public class TraderService(
 
         foreach (var (tpl, price, loyaltyLevel) in hardcodedItems)
         {
-            var assortId = new MongoId();
-            assort.Items.Add(new Item
-            {
-                Id = assortId,
-                Template = tpl,
-                SlotId = "hideout",
-                Upd = new Upd
-                {
-                    StackObjectsCount = 999999,
-                    BuyRestrictionMax = 0,
-                    BuyRestrictionCurrent = 0,
-                    UnlimitedCount = true
-                }
-            });
-            assort.BarterScheme[assortId] =
-            [
-                [new BarterScheme { Template = Money.ROUBLES, Count = price }]
-            ];
-            assort.LoyalLevelItems[assortId] = loyaltyLevel;
+            AddHardcodedAssortEntry(assort, tpl, price, loyaltyLevel);
         }
+
+        foreach (var shipment in HardcodedShipmentService.GetAllShipments())
+        {
+            AddHardcodedAssortEntry(assort, shipment.TemplateId, shipment.Price, 3);
+        }
+    }
+
+    private static void AddHardcodedAssortEntry(TraderAssort assort, string tpl, int price, int loyaltyLevel)
+    {
+        var assortId = new MongoId();
+        assort.Items.Add(new Item
+        {
+            Id = assortId,
+            Template = tpl,
+            SlotId = "hideout",
+            Upd = new Upd
+            {
+                StackObjectsCount = 999999,
+                BuyRestrictionMax = 0,
+                BuyRestrictionCurrent = 0,
+                UnlimitedCount = true
+            }
+        });
+        assort.BarterScheme[assortId] =
+        [
+            [new BarterScheme { Template = Money.ROUBLES, Count = price }]
+        ];
+        assort.LoyalLevelItems[assortId] = loyaltyLevel;
     }
 
     private bool IsItemStackable(string? tpl)

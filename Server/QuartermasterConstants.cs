@@ -93,7 +93,7 @@ public static class QuartermasterConstants
         {
             "Earpiece", "Headwear", "FaceCover", "ArmorVest", "Eyewear",
             "TacticalVest", "Backpack", "FirstPrimaryWeapon", "SecondPrimaryWeapon",
-            "Holster", "Scabbard"
+            "Holster"
         };
 
         // Container slots whose direct contents can be individually scavenged instead of the whole container

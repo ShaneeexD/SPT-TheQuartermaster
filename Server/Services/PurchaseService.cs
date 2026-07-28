@@ -29,7 +29,9 @@ public class PurchaseService(
     ProfileHelper profileHelper,
     TimeUtil timeUtil,
     HttpResponseUtil httpResponseUtil,
-    RealtimeDatabaseService realtimeDatabaseService
+    RealtimeDatabaseService realtimeDatabaseService,
+    HardcodedShipmentService hardcodedShipmentService,
+    MailSendService mailSendService
 )
 {
     public async Task<bool> PurchaseItem(
@@ -276,6 +278,9 @@ public class PurchaseService(
             count = 1;
         }
 
+        var tplStr = assortItem.Template.ToString();
+        var isShipment = HardcodedShipmentService.IsShipmentTemplate(tplStr);
+
         try
         {
             var salesSumBefore = pmcData.TradersInfo?.TryGetValue(QuartermasterConstants.TraderId, out var traderInfoBefore) == true
@@ -297,32 +302,56 @@ public class PurchaseService(
                 await realtimeDatabaseService.IncrementCommunitySpendingAsync(sessionID, totalPrice);
             }
 
-            var deliveredTree = new List<Item>
+            if (isShipment)
             {
-                new()
+                for (var i = 0; i < count; i++)
                 {
-                    Id = new MongoId(),
-                    Template = assortItem.Template,
-                    SlotId = "hideout",
-                    Upd = new Upd
-                    {
-                        StackObjectsCount = count,
-                        SpawnedInSession = foundInRaid
-                    }
+                    var crateItems = hardcodedShipmentService.BuildShipmentContents(tplStr);
+                    var shipmentDef = HardcodedShipmentService.GetAllShipments().FirstOrDefault(s => s.TemplateId == tplStr);
+                    var message = shipmentDef?.MailMessage ?? "Your Quartermaster shipment has arrived.";
+                    mailSendService.SendDirectNpcMessageToPlayer(
+                        sessionID,
+                        QuartermasterConstants.TraderId.ToString(),
+                        MessageType.NpcTraderMessage,
+                        message,
+                        crateItems,
+                        172800
+                    );
                 }
-            };
+            }
+            else
+            {
+                var itemsToAdd = new List<List<Item>>();
+                for (var i = 0; i < count; i++)
+                {
+                    itemsToAdd.Add(
+                    [
+                        new()
+                        {
+                            Id = new MongoId(),
+                            Template = assortItem.Template,
+                            SlotId = "hideout",
+                            Upd = new Upd
+                            {
+                                StackObjectsCount = 1,
+                                SpawnedInSession = foundInRaid
+                            }
+                        }
+                    ]);
+                }
 
-            var addRequest = new AddItemsDirectRequest
-            {
-                ItemsWithModsToAdd = [deliveredTree],
-                FoundInRaid = foundInRaid,
-                Callback = null,
-                UseSortingTable = false
-            };
-            inventoryHelper.AddItemsToStash(sessionID, addRequest, pmcData, output);
-            if (output.Warnings?.Count > 0)
-            {
-                return false;
+                var addRequest = new AddItemsDirectRequest
+                {
+                    ItemsWithModsToAdd = itemsToAdd,
+                    FoundInRaid = foundInRaid,
+                    Callback = null,
+                    UseSortingTable = false
+                };
+                inventoryHelper.AddItemsToStash(sessionID, addRequest, pmcData, output);
+                if (output.Warnings?.Count > 0)
+                {
+                    return false;
+                }
             }
 
             TrackPurchase(sessionID, QuartermasterConstants.TraderId, buyRequestData.ItemId, count);

@@ -68,7 +68,8 @@ public class QuartermasterPlugin(
     CommunityContractService communityContractService,
     WorkshopContractSyncService workshopContractSyncService,
     HttpResponseUtil httpResponseUtil,
-    ProfileHelper profileHelper
+    ProfileHelper profileHelper,
+    HardcodedShipmentService hardcodedShipmentService
 ) : IOnLoad
 {
     private static string _modPath = string.Empty;
@@ -97,6 +98,9 @@ public class QuartermasterPlugin(
 
             // Ensure the Tier 4 reward crate template exists in the item DB before any profile loads.
             communityRewardService.ResolveTemplateId(4);
+
+            // Ensure hardcoded shipment crate templates exist before the trader assort is built.
+            hardcodedShipmentService.EnsureTemplates();
 
             await traderService.RegisterTrader(_modPath);
 

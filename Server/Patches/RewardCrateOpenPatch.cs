@@ -26,7 +26,10 @@ public class RewardCrateOpenPatch : AbstractPatch
         "6658892e6e007c6f33662002",
         "665732f4464c4b4ba4670fa9",
         "66582972ac60f009f270d2aa",
-        "66789abcde1234567890abce"
+        "66789abcde1234567890abce",
+        "66582972ac60f009f270d2b1",
+        "66582972ac60f009f270d2b2",
+        "66582972ac60f009f270d2b3"
     };
 
     public static void SetDependencies(InventoryHelper inventoryHelper, ISptLogger<RewardCrateOpenPatch> logger)
