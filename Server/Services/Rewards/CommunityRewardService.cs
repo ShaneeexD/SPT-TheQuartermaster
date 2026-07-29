@@ -148,12 +148,13 @@ public class CommunityRewardService(
                 var localHash = realtimeDatabaseService.HashProfileId(sessionId.ToString());
                 if (localHash == jackpotWinner.WinnerHash)
                 {
-                    message += $"\n\n JACKPOT! You won the community jackpot of {jackpotWinner.Amount:N0} roubles! Check your messages for the payout.";
                     isJackpotWinner = true;
                     jackpotAmount = jackpotWinner.Amount;
                     logger.DebugInfo($"[TheQuartermaster] Jackpot winner! {jackpotWinner.Amount} roubles to be sent to {sessionId}.");
                 }
             }
+
+            SetLastClaimedWeek(fullProfile, desiredWeek);
 
             mailSendService.SendDirectNpcMessageToPlayer(
                 sessionId,
@@ -191,7 +192,6 @@ public class CommunityRewardService(
                 );
             }
 
-            SetLastClaimedWeek(fullProfile, desiredWeek);
             logger.DebugInfo($"[TheQuartermaster] Sent weekly reward {weeklyReward.RewardId} (tier {weeklyReward.Tier}) to {sessionId}.");
         }
         catch (Exception ex)
