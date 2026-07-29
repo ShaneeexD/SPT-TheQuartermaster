@@ -55,6 +55,9 @@ internal class ContractDataBundle
 
     [JsonPropertyName("playerCount")]
     public PlayerCountStats PlayerCount { get; set; } = new();
+
+    [JsonPropertyName("jackpotWinner")]
+    public JackpotWinner? JackpotWinner { get; set; }
 }
 
 public class ModVersionData
@@ -189,6 +192,12 @@ public class ContractFileService(
     {
         var bundle = await TryGetBundleAsync();
         return bundle?.PlayerCount;
+    }
+
+    public async Task<JackpotWinner?> TryGetJackpotWinnerAsync()
+    {
+        var bundle = await TryGetBundleAsync();
+        return bundle?.JackpotWinner;
     }
 
     internal async Task<ContractDataBundle?> TryGetBundleAsync()

@@ -18,4 +18,7 @@ public class RewardDataBundle
 
     [JsonPropertyName("playerCount")]
     public PlayerCountStats PlayerCount { get; set; } = new();
+
+    [JsonPropertyName("jackpotWinner")]
+    public JackpotWinner? JackpotWinner { get; set; }
 }

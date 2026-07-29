@@ -31,7 +31,8 @@ public class RewardFileService(
                 : 0,
             WeeklyReward = bundle.WeeklyReward,
             CommunityStats = bundle.CommunityStats,
-            PlayerCount = bundle.PlayerCount
+            PlayerCount = bundle.PlayerCount,
+            JackpotWinner = bundle.JackpotWinner
         };
     }
 
@@ -51,5 +52,11 @@ public class RewardFileService(
     {
         var bundle = await GetRewardDataBundleAsync();
         return bundle?.PlayerCount;
+    }
+
+    public async Task<JackpotWinner?> GetJackpotWinnerAsync()
+    {
+        var bundle = await GetRewardDataBundleAsync();
+        return bundle?.JackpotWinner;
     }
 }

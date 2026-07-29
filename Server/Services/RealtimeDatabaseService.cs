@@ -344,6 +344,46 @@ public class RealtimeDatabaseService(
         }
     }
 
+    public async Task IncrementJackpotAsync(MongoId sessionId, double totalPrice, string profileName)
+    {
+        if (!IsEnabled)
+        {
+            return;
+        }
+
+        var amount = (long) Math.Round(totalPrice * 0.005);
+        if (amount <= 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var buyerHash = HashProfileId(sessionId.ToString());
+
+            var tickets = await GetJsonAsync<Dictionary<string, Dictionary<string, object>>>("jackpot/tickets") ?? new Dictionary<string, Dictionary<string, object>>();
+            if (!tickets.TryGetValue(buyerHash, out var entry))
+            {
+                entry = new Dictionary<string, object>();
+                tickets[buyerHash] = entry;
+            }
+            var currentCount = tickets[buyerHash].TryGetValue("count", out var c) && c is JsonElement ce ? ce.GetInt32() : 0;
+            tickets[buyerHash]["count"] = currentCount + 1;
+            tickets[buyerHash]["name"] = profileName;
+            await PutJsonAsync("jackpot/tickets", tickets);
+
+            var pool = await GetJsonAsync<JackpotPool>("jackpot/pool") ?? new JackpotPool();
+            pool.Amount += amount;
+            await PutJsonAsync("jackpot/pool", pool);
+
+            logger.DebugInfo($"[TheQuartermaster] Jackpot: +{amount} roubles (0.5% of {totalPrice}), ticket for {buyerHash[..8]} ({profileName}).");
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"[TheQuartermaster] Failed to increment jackpot: {ex.Message}", ex);
+        }
+    }
+
     private static string GetIsoWeek(DateTime date)
     {
         var year = ISOWeek.GetYear(date);
@@ -1733,7 +1773,7 @@ public class RealtimeDatabaseService(
         }
     }
 
-    private string HashProfileId(string profileId)
+    public string HashProfileId(string profileId)
     {
         var salt = QuartermasterConstants.Seller.AnonymizationSalt;
         var input = string.IsNullOrEmpty(salt) ? profileId : $"{profileId}:{salt}";

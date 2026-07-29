@@ -205,6 +205,11 @@ public class PurchaseService(
 
             await realtimeDatabaseService.IncrementCommunitySpendingAsync(sessionID, totalPrice);
 
+            if (configService.Config.JackpotEnabled)
+            {
+                await realtimeDatabaseService.IncrementJackpotAsync(sessionID, totalPrice, pmcData.Info?.Nickname ?? "Unknown");
+            }
+
             // Build the item(s) to deliver
             var deliveredTree = isStackable
                 ? BuildStackableDeliveryTree(itemTree, count)
@@ -300,6 +305,11 @@ public class PurchaseService(
             if (totalPrice > 0)
             {
                 await realtimeDatabaseService.IncrementCommunitySpendingAsync(sessionID, totalPrice);
+
+                if (configService.Config.JackpotEnabled)
+                {
+                    await realtimeDatabaseService.IncrementJackpotAsync(sessionID, totalPrice, pmcData.Info?.Nickname ?? "Unknown");
+                }
             }
 
             if (isShipment)

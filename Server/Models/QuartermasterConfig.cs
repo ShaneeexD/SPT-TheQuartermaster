@@ -60,4 +60,7 @@ public record QuartermasterConfig
 
     [JsonPropertyName("scavengingEnabled")]
     public bool ScavengingEnabled { get; set; } = true;
+
+    [JsonPropertyName("jackpotEnabled")]
+    public bool JackpotEnabled { get; set; } = true;
 }

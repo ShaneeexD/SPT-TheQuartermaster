@@ -8,7 +8,9 @@ using SPTarkov.Server.Core.Models.Utils;
 using SPTarkov.Server.Core.Services;
 using SPTarkov.Server.Core.Services.Mod;
 using SPTarkov.Server.Core.Models.Spt.Mod;
+using TheQuartermaster.Server.Models;
 using TheQuartermaster.Server.Models.Rewards;
+using TheQuartermaster.Server.Services;
 
 namespace TheQuartermaster.Server.Services.Rewards;
 
@@ -19,7 +21,8 @@ public class CommunityRewardService(
     RewardFileService rewardFileService,
     MailSendService mailSendService,
     CustomItemService customItemService,
-    DatabaseService databaseService
+    DatabaseService databaseService,
+    RealtimeDatabaseService realtimeDatabaseService
 )
 {
     private const string LastClaimedWeekKey = "quartermasterLastClaimedWeek";
@@ -136,6 +139,22 @@ public class CommunityRewardService(
 
             var message = GetTierMessage(weeklyReward.Tier);
 
+            var jackpotWinner = await rewardFileService.GetJackpotWinnerAsync();
+            var isJackpotWinner = false;
+            long jackpotAmount = 0;
+
+            if (jackpotWinner is not null && !string.IsNullOrWhiteSpace(jackpotWinner.WinnerHash) && jackpotWinner.Amount > 0)
+            {
+                var localHash = realtimeDatabaseService.HashProfileId(sessionId.ToString());
+                if (localHash == jackpotWinner.WinnerHash)
+                {
+                    message += $"\n\n JACKPOT! You won the community jackpot of {jackpotWinner.Amount:N0} roubles! Check your messages for the payout.";
+                    isJackpotWinner = true;
+                    jackpotAmount = jackpotWinner.Amount;
+                    logger.DebugInfo($"[TheQuartermaster] Jackpot winner! {jackpotWinner.Amount} roubles to be sent to {sessionId}.");
+                }
+            }
+
             mailSendService.SendDirectNpcMessageToPlayer(
                 sessionId,
                 QuartermasterConstants.TraderId.ToString(),
@@ -144,6 +163,33 @@ public class CommunityRewardService(
                 items,
                 172800
             );
+
+            if (isJackpotWinner && jackpotAmount > 0)
+            {
+                var roubleItems = new List<Item>
+                {
+                    new()
+                    {
+                        Id = new MongoId(),
+                        Template = new MongoId("5449016a4bdc2d6f028b456f"),
+                        SlotId = "hideout",
+                        Upd = new Upd
+                        {
+                            StackObjectsCount = jackpotAmount,
+                            SpawnedInSession = false
+                        }
+                    }
+                };
+
+                mailSendService.SendDirectNpcMessageToPlayer(
+                    sessionId,
+                    QuartermasterConstants.TraderId.ToString(),
+                    MessageType.NpcTraderMessage,
+                    $"JACKPOT PAYOUT — You won the community jackpot of {jackpotAmount:N0} roubles! Congratulations!",
+                    roubleItems,
+                    172800
+                );
+            }
 
             SetLastClaimedWeek(fullProfile, desiredWeek);
             logger.DebugInfo($"[TheQuartermaster] Sent weekly reward {weeklyReward.RewardId} (tier {weeklyReward.Tier}) to {sessionId}.");
