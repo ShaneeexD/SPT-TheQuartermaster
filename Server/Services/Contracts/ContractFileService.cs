@@ -52,6 +52,9 @@ internal class ContractDataBundle
 
     [JsonPropertyName("communityStats")]
     public CommunityStats CommunityStats { get; set; } = new();
+
+    [JsonPropertyName("playerCount")]
+    public PlayerCountStats PlayerCount { get; set; } = new();
 }
 
 public class ModVersionData
@@ -180,6 +183,12 @@ public class ContractFileService(
     {
         var bundle = await TryGetBundleAsync();
         return bundle?.ItemOverrides;
+    }
+
+    public async Task<PlayerCountStats?> TryGetPlayerCountStatsAsync()
+    {
+        var bundle = await TryGetBundleAsync();
+        return bundle?.PlayerCount;
     }
 
     internal async Task<ContractDataBundle?> TryGetBundleAsync()

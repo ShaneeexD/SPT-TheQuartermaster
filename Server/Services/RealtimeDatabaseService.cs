@@ -351,6 +351,33 @@ public class RealtimeDatabaseService(
         return $"{year}-W{week:D2}";
     }
 
+    /// <summary>
+    /// Writes a lightweight presence heartbeat for this server instance to RTDB.
+    /// Uses the Firebase server-timestamp placeholder to avoid client clock skew.
+    /// The Oracle VM cron prunes stale entries and computes current/peak player counts.
+    /// </summary>
+    public async Task SendHeartbeatAsync()
+    {
+        if (!IsEnabled)
+        {
+            return;
+        }
+
+        try
+        {
+            var payload = new Dictionary<string, object>
+            {
+                ["lastSeen"] = new Dictionary<string, string> { [".sv"] = "timestamp" }
+            };
+            await PutJsonAsync($"presence/{InstanceId}", payload);
+            logger.DebugDebug($"[TheQuartermaster] Sent presence heartbeat ({InstanceId}).");
+        }
+        catch (Exception ex)
+        {
+            logger.DebugWarning($"[TheQuartermaster] Failed to send presence heartbeat: {ex.Message}");
+        }
+    }
+
     public async Task BumpCatalogueVersionAsync()
     {
         if (!IsEnabled)

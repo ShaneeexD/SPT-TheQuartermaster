@@ -69,7 +69,8 @@ public class QuartermasterPlugin(
     WorkshopContractSyncService workshopContractSyncService,
     HttpResponseUtil httpResponseUtil,
     ProfileHelper profileHelper,
-    HardcodedShipmentService hardcodedShipmentService
+    HardcodedShipmentService hardcodedShipmentService,
+    PresenceHeartbeatService presenceHeartbeatService
 ) : IOnLoad
 {
     private static string _modPath = string.Empty;
@@ -119,6 +120,7 @@ public class QuartermasterPlugin(
             communityContractService.Start();
             workshopContractSyncService.Start();
             marketplaceWorkerService.Start();
+            presenceHeartbeatService.Start();
 
             SellPatch.SetDependencies(
                 configService,

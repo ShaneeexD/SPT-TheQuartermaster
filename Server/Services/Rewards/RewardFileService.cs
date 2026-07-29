@@ -30,7 +30,8 @@ public class RewardFileService(
                 ? ((DateTimeOffset) bundle.GeneratedAt.Value.ToDateTime()).ToUnixTimeSeconds()
                 : 0,
             WeeklyReward = bundle.WeeklyReward,
-            CommunityStats = bundle.CommunityStats
+            CommunityStats = bundle.CommunityStats,
+            PlayerCount = bundle.PlayerCount
         };
     }
 
@@ -44,5 +45,11 @@ public class RewardFileService(
     {
         var bundle = await GetRewardDataBundleAsync();
         return bundle?.CommunityStats;
+    }
+
+    public async Task<PlayerCountStats?> GetPlayerCountStatsAsync()
+    {
+        var bundle = await GetRewardDataBundleAsync();
+        return bundle?.PlayerCount;
     }
 }
