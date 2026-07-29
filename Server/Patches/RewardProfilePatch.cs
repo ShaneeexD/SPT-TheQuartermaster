@@ -15,8 +15,8 @@ public class RewardProfilePatch : AbstractPatch
 {
     private static CommunityRewardService? _communityRewardService;
     private static ISptLogger<RewardProfilePatch>? _logger;
-    [ThreadStatic]
-    private static bool _isProcessing;
+    private static readonly HashSet<string> _processingSessions = new();
+    private static readonly object _lock = new();
 
     public static void SetDependencies(CommunityRewardService communityRewardService, ISptLogger<RewardProfilePatch> logger)
     {
@@ -32,14 +32,22 @@ public class RewardProfilePatch : AbstractPatch
     [PatchPostfix]
     private static void Postfix(MongoId sessionId, SptProfile? __result)
     {
-        if (_communityRewardService is null || _isProcessing)
+        if (_communityRewardService is null)
         {
             return;
         }
 
+        var sessionKey = sessionId.ToString();
+        lock (_lock)
+        {
+            if (!_processingSessions.Add(sessionKey))
+            {
+                return;
+            }
+        }
+
         try
         {
-            _isProcessing = true;
             _communityRewardService.TryClaimWeeklyReward(sessionId, __result, __result?.CharacterData?.PmcData)
                 .GetAwaiter()
                 .GetResult();
@@ -50,7 +58,10 @@ public class RewardProfilePatch : AbstractPatch
         }
         finally
         {
-            _isProcessing = false;
+            lock (_lock)
+            {
+                _processingSessions.Remove(sessionKey);
+            }
         }
     }
 }
