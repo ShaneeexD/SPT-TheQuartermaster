@@ -6,8 +6,6 @@ using SPTarkov.Server.Core.Models.Eft.Profile;
 using SPTarkov.Server.Core.Models.Enums;
 using SPTarkov.Server.Core.Models.Utils;
 using SPTarkov.Server.Core.Services;
-using SPTarkov.Server.Core.Services.Mod;
-using SPTarkov.Server.Core.Models.Spt.Mod;
 using TheQuartermaster.Server.Models;
 using TheQuartermaster.Server.Models.Rewards;
 using TheQuartermaster.Server.Services;
@@ -20,7 +18,6 @@ public class CommunityRewardService(
     ConfigService configService,
     RewardFileService rewardFileService,
     MailSendService mailSendService,
-    CustomItemService customItemService,
     DatabaseService databaseService,
     RealtimeDatabaseService realtimeDatabaseService
 )
@@ -35,13 +32,12 @@ public class CommunityRewardService(
         [4] = ("Quartermaster Supply Crate - Tier 4", "QM Crate T4", "A premium supply crate from the Quartermaster. Outstanding community contributions this week earned top-shelf gear.")
     };
 
-    private const string Tier4TemplateId = "66789abcde1234567890abce";
-
     private static readonly Dictionary<int, string> TierTemplates = new()
     {
         [1] = "6658892e6e007c6f33662002",
         [2] = "665732f4464c4b4ba4670fa9",
-        [3] = "66582972ac60f009f270d2aa"
+        [3] = "66582972ac60f009f270d2aa",
+        [4] = "66582972ac60f009f270d2aa"
     };
 
     public async Task TryClaimWeeklyReward(MongoId sessionId, SptProfile? fullProfile, PmcData? pmcData)
@@ -86,11 +82,6 @@ public class CommunityRewardService(
                     ParentId = null,
                     Upd = new Upd
                     {
-                        Tag = new UpdTag
-                        {
-                            Name = weeklyReward.RewardId,
-                            Color = weeklyReward.Tier
-                        },
                         SpawnedInSession = false
                     },
                     Desc = weeklyReward.Week
@@ -127,14 +118,6 @@ public class CommunityRewardService(
                         AddChildren(content.Children, contentId, content.FoundInRaid, items);
                     }
                 }
-            }
-
-            // Tier 4 uses the Tier 3 crate with a yellow highlight marker.
-            if (weeklyReward.Tier == 4)
-            {
-                items[0].Upd ??= new Upd();
-                items[0].Upd.Tag ??= new UpdTag();
-                items[0].Upd.Tag.Name = $"{weeklyReward.RewardId}|yellow";
             }
 
             var message = GetTierMessage(weeklyReward.Tier);
@@ -202,56 +185,7 @@ public class CommunityRewardService(
 
     public string ResolveTemplateId(int tier)
     {
-        if (tier == 4)
-        {
-            return EnsureTier4Template();
-        }
-
         return TierTemplates.TryGetValue(tier, out var templateId) ? templateId : string.Empty;
-    }
-
-    private string EnsureTier4Template()
-    {
-        var items = databaseService.GetItems();
-        if (items.ContainsKey(Tier4TemplateId))
-        {
-            return Tier4TemplateId;
-        }
-
-        if (!items.TryGetValue(TierTemplates[3], out var baseTpl))
-        {
-            logger.DebugWarning("[TheQuartermaster] Tier 3 supply crate template not found; cannot create Tier 4 clone.");
-            return TierTemplates[3];
-        }
-
-        var handbook = databaseService.GetHandbook().Items.FirstOrDefault(h => h.Id.ToString() == TierTemplates[3]);
-        var details = new NewItemFromCloneDetails
-        {
-            NewId = Tier4TemplateId,
-            ItemTplToClone = new MongoId(TierTemplates[3]),
-            ParentId = baseTpl.Parent.ToString(),
-            HandbookParentId = handbook is not null ? handbook.ParentId.ToString() : "5b5f6fa186f77409407a7eb7",
-            HandbookPriceRoubles = 1,
-            FleaPriceRoubles = 1,
-            OverrideProperties = new TemplateItemProperties { BackgroundColor = "yellow" },
-            Locales = new Dictionary<string, LocaleDetails>
-            {
-                ["en"] = new LocaleDetails
-                {
-                    Name = baseTpl.Properties?.Name ?? "Tier 4 Supply Crate",
-                    ShortName = baseTpl.Properties?.ShortName ?? "T4 Crate",
-                    Description = baseTpl.Properties?.Description ?? "Weekly Tier 4 community supply shipment."
-                }
-            }
-        };
-
-        var result = customItemService.CreateItemFromClone(details);
-        if (result.Success != true)
-        {
-            logger.DebugWarning($"[TheQuartermaster] Tier 4 template clone skipped/failed: {string.Join(", ", result.Errors ?? [])}");
-        }
-
-        return Tier4TemplateId;
     }
 
     private static void AddChildren(List<RewardPackageContent> children, MongoId parentId, bool foundInRaid, List<Item> items)
