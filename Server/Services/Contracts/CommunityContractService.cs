@@ -1,12 +1,12 @@
 using System.IO;
 using System.Text.Json;
 using SPTarkov.DI.Annotations;
-using SPTarkov.Server.Core.Helpers;
+using SPTarkov.Server.Core.Helpers.Server;
 using SPTarkov.Server.Core.Models.Common;
 using SPTarkov.Server.Core.Models.Eft.Profile;
 using SPTarkov.Server.Core.Models.Eft.Ws;
 using SPTarkov.Server.Core.Models.Enums;
-using SPTarkov.Server.Core.Models.Utils;
+using SPTarkov.Common.Models.Logging;
 using SPTarkov.Server.Core.Servers;
 using SPTarkov.Server.Core.Services;
 using SPTarkov.Server.Core.Utils;
@@ -79,6 +79,7 @@ public class CommunityContractService(
     {
         try
         {
+            if (string.IsNullOrEmpty(_versionFilePath)) return;
             var dir = Path.GetDirectoryName(_versionFilePath);
             if (!string.IsNullOrEmpty(dir))
             {
@@ -114,6 +115,7 @@ public class CommunityContractService(
     {
         try
         {
+            if (string.IsNullOrEmpty(_notifiedFilePath)) return;
             var dir = Path.GetDirectoryName(_notifiedFilePath);
             if (!string.IsNullOrEmpty(dir))
             {
@@ -153,6 +155,12 @@ public class CommunityContractService(
 
     public async Task TickAsync()
     {
+        if (string.IsNullOrEmpty(_versionFilePath) && !string.IsNullOrEmpty(configService.ModPath))
+        {
+            _versionFilePath = Path.Combine(configService.ModPath, "cache", "contract_version.txt");
+            _notifiedFilePath = Path.Combine(configService.ModPath, "cache", "notified_contracts.json");
+        }
+
         if (!await _semaphore.WaitAsync(0))
         {
             logger.DebugWarning("[TheQuartermaster] Community contract tick already running; skipping.");
@@ -204,7 +212,7 @@ public class CommunityContractService(
                 var newEntries = activeEntries.Where(e => !string.IsNullOrWhiteSpace(e.Id) && !_notifiedEntryIds.Contains(e.Id)).ToList();
                 if (newEntries.Count > 0)
                 {
-                    NotifyPlayersOfNewContracts(newEntries, definitions);
+                    await NotifyPlayersOfNewContracts(newEntries, definitions);
                     foreach (var entry in newEntries)
                     {
                         _notifiedEntryIds.Add(entry.Id!);
@@ -229,7 +237,7 @@ public class CommunityContractService(
         }
     }
 
-    private void NotifyPlayersOfNewContracts(
+    private async Task NotifyPlayersOfNewContracts(
         List<ContractScheduleEntry> activeEntries,
         Dictionary<string, ContractDefinition> definitionsById
     )
@@ -290,7 +298,7 @@ public class CommunityContractService(
                         Message = message,
                     };
 
-                    notificationSendHelper.SendMessage(sessionId, notification);
+                    await notificationSendHelper.SendMessageAsync(sessionId, notification);
                 }
                 catch (Exception ex)
                 {

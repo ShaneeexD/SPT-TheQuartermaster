@@ -2,9 +2,10 @@ using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.Models.Common;
 using SPTarkov.Server.Core.Models.Eft.Common.Tables;
 using SPTarkov.Server.Core.Models.Spt.Mod;
-using SPTarkov.Server.Core.Models.Utils;
+using SPTarkov.Common.Models.Logging;
 using SPTarkov.Server.Core.Services;
-using SPTarkov.Server.Core.Services.Mod;
+using SPTarkov.Server.Core.Services.Modding.Custom;
+using SPTarkov.Server.Core.Models.Spt.Tables;
 using SPTarkov.Server.Core.Utils;
 
 namespace TheQuartermaster.Server.Services;
@@ -12,7 +13,7 @@ namespace TheQuartermaster.Server.Services;
 [Injectable(InjectionType.Singleton)]
 public class HardcodedShipmentService(
     ISptLogger<HardcodedShipmentService> logger,
-    DatabaseService databaseService,
+    TemplateTable templateTable,
     CustomItemService customItemService,
     RandomUtil randomUtil
 )
@@ -100,7 +101,7 @@ public class HardcodedShipmentService(
 
     private void EnsureTemplate(ShipmentDef shipment)
     {
-        var items = databaseService.GetItems();
+        var items = templateTable.Items;
         if (items.ContainsKey(shipment.TemplateId))
         {
             return;
@@ -112,10 +113,11 @@ public class HardcodedShipmentService(
             return;
         }
 
-        var handbook = databaseService.GetHandbook().Items.FirstOrDefault(h => h.Id.ToString() == BaseCrateTpl);
+        var handbook = templateTable.Handbook.Items.FirstOrDefault(h => h.Id.ToString() == BaseCrateTpl);
         var details = new NewItemFromCloneDetails
         {
             NewId = shipment.TemplateId,
+            NewItemName = shipment.Name,
             ItemTplToClone = new MongoId(BaseCrateTpl),
             ParentId = baseTpl.Parent.ToString(),
             HandbookParentId = handbook is not null ? handbook.ParentId.ToString() : "5b5f6fa186f77409407a7eb7",

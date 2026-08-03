@@ -4,9 +4,10 @@ using SPTarkov.Server.Core.Models.Eft.Common;
 using SPTarkov.Server.Core.Models.Eft.Common.Tables;
 using SPTarkov.Server.Core.Models.Enums;
 using SPTarkov.Server.Core.Models.Spt.Config;
-using SPTarkov.Server.Core.Models.Spt.Server;
-using SPTarkov.Server.Core.Models.Utils;
-using SPTarkov.Server.Core.Helpers;
+using SPTarkov.Server.Core.Models.Spt.Tables;
+using SPTarkov.Common.Models.Logging;
+using SPTarkov.Server.Core.Helpers.Items;
+using SPTarkov.Server.Core.Helpers.Profile;
 using SPTarkov.Server.Core.Services;
 using SPTarkov.Server.Core.Routers;
 using SPTarkov.Server.Core.Servers;
@@ -22,14 +23,16 @@ public class TraderService(
     BackendConfigService backendConfigService,
     MarketplaceService marketplaceService,
     ItemHelper itemHelper,
-    DatabaseService databaseService,
+    TradersTable tradersTable,
+    TemplateTable templateTable,
+    LocaleTable localeTable,
     ProfileHelper profileHelper,
-    ConfigServer configServer,
+    TraderConfig traderConfig,
     ItemCloneService itemCloneService,
     ImageRouter? imageRouter = null
 )
 {
-    private readonly TraderConfig _traderConfig = configServer.GetConfig<TraderConfig>();
+    private readonly TraderConfig _traderConfig = traderConfig;
     private readonly Dictionary<MongoId, AssortStackInfo> _assortIdToStackInfo = new();
     private readonly List<QuartermasterListing> _activeListings = [];
     private Trader? _trader;
@@ -64,7 +67,7 @@ public class TraderService(
         }
 
         var traderId = QuartermasterConstants.TraderId;
-        if (databaseService.GetTables().Traders.ContainsKey(traderId))
+        if (tradersTable.ContainsKey(traderId))
         {
             logger.DebugWarning($"[TheQuartermaster] Trader {traderId} already registered, skipping.");
             return;
@@ -90,7 +93,7 @@ public class TraderService(
             RegisterAvatarRoute(modPath, traderBase);
             SetTraderUpdateTime(traderBase);
 
-            databaseService.GetTables().Traders[traderId] = _trader;
+            tradersTable[traderId] = _trader;
 
             await RefreshAssort();
 
@@ -212,7 +215,7 @@ public class TraderService(
 
     private TraderBase BuildTraderBase(RtdbBuyFilters buyFilters)
     {
-        var allParents = new HashSet<MongoId>(databaseService.GetItems().Values.Select(i => i.Parent).Where(p => !string.IsNullOrWhiteSpace(p)));
+        var allParents = new HashSet<MongoId>(templateTable.Items.Values.Select(i => i.Parent).Where(p => !string.IsNullOrWhiteSpace(p)));
 
         var buyCategories = ParseMongoIdList(buyFilters.BuyCategories);
         var buyItems = ParseMongoIdList(buyFilters.BuyItems);
@@ -373,7 +376,7 @@ public class TraderService(
         }
 
         var traderId = QuartermasterConstants.TraderId;
-        if (!databaseService.GetTables().Traders.ContainsKey(traderId))
+        if (!tradersTable.ContainsKey(traderId))
         {
             return;
         }
@@ -715,14 +718,14 @@ public class TraderService(
 
     private void AddTraderLocales(TraderBase traderBase)
     {
-        var locales = databaseService.GetTables().Locales.Global;
+        var locales = localeTable.Global;
         var traderId = traderBase.Id;
 
         foreach (var (_, localeData) in locales)
         {
             localeData.AddTransformer(ld =>
             {
-                ld ??= new Dictionary<string, string>();
+                ld ??= new GlobalLocaleDictionary();
                 ld[$"{traderId} FullName"] = QuartermasterConstants.TraderFullName;
                 ld[$"{traderId} FirstName"] = QuartermasterConstants.TraderNickname;
                 ld[$"{traderId} Nickname"] = QuartermasterConstants.TraderNickname;

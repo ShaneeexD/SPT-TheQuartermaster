@@ -5,9 +5,10 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Google.Cloud.Firestore;
 using SPTarkov.DI.Annotations;
-using SPTarkov.Server.Core.Helpers;
+using SPTarkov.Server.Core.Helpers.Items;
 using SPTarkov.Server.Core.Models.Common;
-using SPTarkov.Server.Core.Models.Utils;
+using SPTarkov.Common.Models.Logging;
+using SPTarkov.Server.Core.Models.Spt.Tables;
 using SPTarkov.Server.Core.Services;
 using TheQuartermaster.Server.Models;
 using TheQuartermaster.Server.Models.Contracts;
@@ -85,7 +86,7 @@ public class ContractFileService(
     ISptLogger<ContractFileService> logger,
     ConfigService configService,
     ItemHelper itemHelper,
-    DatabaseService databaseService
+    LocaleTable localeTable
 )
 {
     private readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(15) };
@@ -315,7 +316,7 @@ public class ContractFileService(
 
         try
         {
-            var locales = databaseService.GetTables().Locales.Global;
+            var locales = localeTable.Global;
             if (locales.TryGetValue("en", out var enLocale))
             {
                 var localeDict = enLocale.Value;

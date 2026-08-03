@@ -1,13 +1,14 @@
 using System.Reflection;
 using HarmonyLib;
+using SPTarkov.Common.Models.Logging;
 using SPTarkov.DI.Annotations;
 using SPTarkov.Reflection.Patching;
-using SPTarkov.Server.Core.Helpers;
+using SPTarkov.Server.Core.Helpers.InRaid;
 using SPTarkov.Server.Core.Models.Common;
 using SPTarkov.Server.Core.Models.Eft.Common;
 using SPTarkov.Server.Core.Models.Eft.Common.Tables;
 using SPTarkov.Server.Core.Extensions;
-using SPTarkov.Server.Core.Models.Utils;
+using SPTarkov.Server.Core.Models.Spt.Tables;
 using SPTarkov.Server.Core.Services;
 using SPTarkov.Server.Core.Utils;
 using TheQuartermaster.Server.Models;
@@ -24,30 +25,25 @@ public class ScavengePatch : AbstractPatch
     private static BackendConfigService? _backendConfigService;
     private static ScavengedItemService? _scavengedItemService;
     private static ItemCloneService? _itemCloneService;
-    private static DatabaseService? _databaseService;
+    private static TemplateTable? _templateTable;
     private static RandomUtil? _randomUtil;
 
-    public ScavengePatch()
-        : base("TheQuartermaster.ScavengePatch")
-    {
-    }
-
-    public static void SetDependencies(
+    public ScavengePatch(
         ISptLogger<ScavengePatch> logger,
         ConfigService configService,
         BackendConfigService backendConfigService,
         ScavengedItemService scavengedItemService,
         ItemCloneService itemCloneService,
-        DatabaseService databaseService,
+        TemplateTable templateTable,
         RandomUtil randomUtil
-    )
+    ) : base("TheQuartermaster.ScavengePatch")
     {
         _logger = logger;
         _configService = configService;
         _backendConfigService = backendConfigService;
         _scavengedItemService = scavengedItemService;
         _itemCloneService = itemCloneService;
-        _databaseService = databaseService;
+        _templateTable = templateTable;
         _randomUtil = randomUtil;
     }
 
@@ -138,7 +134,7 @@ public class ScavengePatch : AbstractPatch
                 .ToHashSet() ?? new HashSet<MongoId>();
 
             // Filter out money/currency and quest items
-            var dbItems = _databaseService?.GetItems();
+            var dbItems = _templateTable?.Items;
             var candidates = lostRootItems.Where(item =>
             {
                 if (insuredIds.Contains(item.Id))

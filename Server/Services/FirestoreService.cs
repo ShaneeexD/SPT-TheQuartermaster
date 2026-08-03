@@ -2,7 +2,7 @@ using Google.Cloud.Firestore;
 using Google.Cloud.Firestore.V1;
 using Grpc.Core;
 using SPTarkov.DI.Annotations;
-using SPTarkov.Server.Core.Models.Utils;
+using SPTarkov.Common.Models.Logging;
 using TheQuartermaster.Server.Services.Contracts;
 using Version = SemanticVersioning.Version;
 

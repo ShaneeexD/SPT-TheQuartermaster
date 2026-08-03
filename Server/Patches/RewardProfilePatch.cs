@@ -1,11 +1,11 @@
 using System.Reflection;
 using HarmonyLib;
+using SPTarkov.Common.Models.Logging;
 using SPTarkov.DI.Annotations;
 using SPTarkov.Reflection.Patching;
-using SPTarkov.Server.Core.Helpers;
+using SPTarkov.Server.Core.Helpers.Profile;
 using SPTarkov.Server.Core.Models.Common;
 using SPTarkov.Server.Core.Models.Eft.Profile;
-using SPTarkov.Server.Core.Models.Utils;
 using TheQuartermaster.Server.Services.Rewards;
 
 namespace TheQuartermaster.Server.Patches;
@@ -18,7 +18,7 @@ public class RewardProfilePatch : AbstractPatch
     private static readonly HashSet<string> _processingSessions = new();
     private static readonly object _lock = new();
 
-    public static void SetDependencies(CommunityRewardService communityRewardService, ISptLogger<RewardProfilePatch> logger)
+    public RewardProfilePatch(CommunityRewardService communityRewardService, ISptLogger<RewardProfilePatch> logger) : base("TheQuartermaster.RewardProfilePatch")
     {
         _communityRewardService = communityRewardService;
         _logger = logger;

@@ -4,6 +4,7 @@ using EFT.InventoryLogic;
 using HarmonyLib;
 using Newtonsoft.Json.Linq;
 using SPT.Reflection.Patching;
+using EFT;
 
 namespace TheQuartermaster.Client.Patches;
 
@@ -11,19 +12,19 @@ public class TagComponentInjectionPatch : ModulePatch
 {
     protected override MethodBase GetTargetMethod()
     {
-        return AccessTools.Method(typeof(GClass1911), nameof(GClass1911.CreateItem));
+        return AccessTools.Method(typeof(ItemFactory), nameof(ItemFactory.CreateItem));
     }
 
     [PatchPostfix]
-    public static void Postfix(Item __result, GClass846 properties)
+    public static void Postfix(Item __result, UnparsedData itemDiff)
     {
-        if (__result == null || properties == null || properties.JToken == null)
+        if (__result == null || itemDiff == null || itemDiff.JToken == null)
             return;
 
         if (__result.GetItemComponent<TagComponent>() != null)
             return;
 
-        var token = properties.JToken as JObject;
+        var token = itemDiff.JToken as JObject;
         if (token == null)
             return;
 

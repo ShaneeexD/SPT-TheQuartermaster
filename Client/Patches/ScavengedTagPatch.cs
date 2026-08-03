@@ -7,6 +7,7 @@ using EFT;
 using EFT.InventoryLogic;
 using EFT.UI;
 using EFT.UI.DragAndDrop;
+using EFT.Quests;
 using HarmonyLib;
 using SPT.Reflection.Patching;
 using TheQuartermaster.Client.Services;
@@ -24,7 +25,7 @@ public class ScavengedTagPatch : ModulePatch
 
     protected override MethodBase GetTargetMethod()
     {
-        return AccessTools.Method(typeof(GridItemView), "method_21");
+        return AccessTools.Method(typeof(GridItemView), "UpdateTag");
     }
 
     [PatchPostfix]
@@ -144,7 +145,7 @@ public class ScavengedTagPatch : ModulePatch
                 return;
             }
 
-            _skullSprite = staticIcons.QuestTypeSprites[RawQuestClass.EQuestType.Elimination];
+            _skullSprite = staticIcons.QuestTypeSprites[QuestTemplate.EQuestType.Elimination];
             if (_skullSprite == null)
             {
                 if (Plugin.DebugLogging) Plugin.Log.LogWarning("[TheQuartermaster] Elimination skull sprite not found in StaticIcons");

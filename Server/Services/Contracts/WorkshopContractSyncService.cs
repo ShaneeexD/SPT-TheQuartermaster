@@ -4,7 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Google.Cloud.Firestore;
 using SPTarkov.DI.Annotations;
-using SPTarkov.Server.Core.Models.Utils;
+using SPTarkov.Common.Models.Logging;
 using TheQuartermaster.Server.Models;
 using TheQuartermaster.Server.Models.Contracts;
 using TheQuartermaster.Server.Services;

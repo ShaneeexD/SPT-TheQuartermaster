@@ -1,14 +1,14 @@
 using System;
 using System.Threading.Tasks;
+using EFT.UI;
 using UnityEngine;
 
 namespace TheQuartermaster.Client.UI
 {
-    /// <summary>
-    /// Simple GInterface486 implementation that activates/deactivates a GameObject.
+    /// Simple ITabController implementation that activates/deactivates a GameObject.
     /// Used as the Controller for the cloned Community tab so Select()/Deselect() work natively.
     /// </summary>
-    public class CommunityScreenController : GInterface486
+    public class CommunityScreenController : ITabController
     {
         private readonly GameObject _screenObject;
 

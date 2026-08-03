@@ -1,13 +1,13 @@
 using System.Reflection;
 using HarmonyLib;
+using SPTarkov.Common.Models.Logging;
 using SPTarkov.DI.Annotations;
 using SPTarkov.Reflection.Patching;
 using SPTarkov.Server.Core.Models.Common;
 using SPTarkov.Server.Core.Models.Eft.Common;
 using SPTarkov.Server.Core.Models.Eft.Trade;
 using SPTarkov.Server.Core.Models.Eft.ItemEvent;
-using SPTarkov.Server.Core.Models.Utils;
-using SPTarkov.Server.Core.Helpers;
+using SPTarkov.Server.Core.Helpers.Commerce;
 using TheQuartermaster.Server.Services;
 
 namespace TheQuartermaster.Server.Patches;
@@ -18,7 +18,7 @@ public class BuyPatch : AbstractPatch
     private static PurchaseService? _purchaseService;
     private static ISptLogger<BuyPatch>? _logger;
 
-    public static void SetDependencies(PurchaseService purchaseService, ISptLogger<BuyPatch> logger)
+    public BuyPatch(PurchaseService purchaseService, ISptLogger<BuyPatch> logger) : base("TheQuartermaster.BuyPatch")
     {
         _purchaseService = purchaseService;
         _logger = logger;
@@ -33,7 +33,7 @@ public class BuyPatch : AbstractPatch
     private static bool Prefix(
         PmcData pmcData,
         ProcessBuyTradeRequestData buyRequestData,
-        MongoId sessionID,
+        MongoId sessionId,
         bool foundInRaid,
         ItemEventRouterResponse output
     )
@@ -51,13 +51,13 @@ public class BuyPatch : AbstractPatch
 
         try
         {
-            var result = _purchaseService.PurchaseItem(pmcData, buyRequestData, sessionID, foundInRaid, output)
+            var result = _purchaseService.PurchaseItem(pmcData, buyRequestData, sessionId, foundInRaid, output)
                 .GetAwaiter()
                 .GetResult();
 
             if (result)
             {
-                _logger?.DebugInfo($"[TheQuartermaster] Intercepted purchase for player {sessionID}, listing {buyRequestData.ItemId}.");
+                _logger?.DebugInfo($"[TheQuartermaster] Intercepted purchase for player {sessionId}, listing {buyRequestData.ItemId}.");
                 return false; // Skip original
             }
 

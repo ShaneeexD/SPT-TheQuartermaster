@@ -5,6 +5,8 @@ using System.Linq;
 using System.Reflection;
 using EFT.UI;
 using EFT;
+using EFT.Quests;
+using EFT.Communications;
 using Newtonsoft.Json.Linq;
 using TheQuartermaster.Client.Services;
 using TMPro;
@@ -154,7 +156,6 @@ namespace TheQuartermaster.Client.UI
                     if (_communityTabComponent != null)
                     {
                         _communityTabComponent.UpdateVisual(false, false);
-                        _communityTabComponent.vmethod_0(false);
                     }
                     if (_tabBarParent != null && _communityTabOriginalSiblingIndex >= 0)
                         _communityTab.transform.SetSiblingIndex(_communityTabOriginalSiblingIndex);
@@ -168,9 +169,9 @@ namespace TheQuartermaster.Client.UI
             string traderName = null;
 
             var screensGroup = CurrentTraderScreen as TraderScreensGroup;
-            if (screensGroup != null && screensGroup.TraderClass != null)
+            if (screensGroup != null && screensGroup.Trader != null)
             {
-                var trader = screensGroup.TraderClass;
+                var trader = screensGroup.Trader;
                 var traderId = trader.Id;
                 var nickname = trader.LocalizedName;
                 traderName = !string.IsNullOrWhiteSpace(nickname) ? nickname : traderId;
@@ -203,7 +204,7 @@ namespace TheQuartermaster.Client.UI
                         if (_communityTabComponent != null)
                         {
                             _communityTabComponent.Interactable = true;
-                            _communityTabComponent.vmethod_0(true);
+                            _communityTabComponent.UpdateVisual(false, false);
                         }
                         var cg = _communityTab.GetComponent<CanvasGroup>();
                         if (cg != null)
@@ -231,7 +232,6 @@ namespace TheQuartermaster.Client.UI
                         _communityTabComponent.UpdateVisual(false, false);
                         // Grey out and disable interaction
                         _communityTabComponent.Interactable = false;
-                        _communityTabComponent.vmethod_0(false);
                     }
                     // Also hide the screen directly in case controller didn't
                     if (_communityScreen != null)
@@ -352,10 +352,7 @@ namespace TheQuartermaster.Client.UI
                 // Set Interactable=true so CanHandlePointerClick works (it returns !bool_0 && Interactable)
                 tab.Interactable = true;
 
-                // Call vmethod_0(true) to fully enable the tab — sets image alpha to 1f and canvas group unlock status
-                tab.vmethod_0(true);
-
-                // Also manually reset CanvasGroup since vmethod_0 may not cover all cases
+                // Manually reset CanvasGroup to make the tab visible and interactable
                 var cg = clone.GetComponent<CanvasGroup>();
                 if (cg != null)
                 {
@@ -1350,14 +1347,14 @@ namespace TheQuartermaster.Client.UI
             return null;
         }
 
-        private static Sprite FindMatchingSprite(Dictionary<RawQuestClass.EQuestType, Sprite> sprites, params string[] keywords)
+        private static Sprite FindMatchingSprite(Dictionary<QuestTemplate.EQuestType, Sprite> sprites, params string[] keywords)
         {
             if (sprites == null || keywords == null)
                 return null;
 
             try
             {
-                var names = Enum.GetNames(typeof(RawQuestClass.EQuestType));
+                var names = Enum.GetNames(typeof(QuestTemplate.EQuestType));
                 foreach (var kw in keywords)
                 {
                     if (string.IsNullOrWhiteSpace(kw))
@@ -1366,7 +1363,7 @@ namespace TheQuartermaster.Client.UI
                     foreach (var n in names)
                     {
                         if (n.IndexOf(kw, StringComparison.OrdinalIgnoreCase) >= 0
-                            && Enum.TryParse<RawQuestClass.EQuestType>(n, true, out var questType)
+                            && Enum.TryParse<QuestTemplate.EQuestType>(n, true, out var questType)
                             && sprites.ContainsKey(questType))
                         {
                             return sprites[questType];
@@ -1826,7 +1823,7 @@ namespace TheQuartermaster.Client.UI
 
         private void ShowErrorPopup(string message)
         {
-            NotificationManagerClass.DisplayWarningNotification(message);
+            NotificationManager.DisplayWarningNotification(message);
         }
 
         private static void SetServiceItemText(GameObject row, string text)

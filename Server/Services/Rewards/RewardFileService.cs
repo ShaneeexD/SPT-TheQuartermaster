@@ -1,5 +1,5 @@
 using SPTarkov.DI.Annotations;
-using SPTarkov.Server.Core.Models.Utils;
+using SPTarkov.Common.Models.Logging;
 using TheQuartermaster.Server.Models.Rewards;
 using TheQuartermaster.Server.Services.Contracts;
 

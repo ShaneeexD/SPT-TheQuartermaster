@@ -1,82 +1,57 @@
+using SPTarkov.Common.Models.Logging;
 using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.DI;
 using SPTarkov.Server.Core.Models.Spt.Mod;
-using SPTarkov.Server.Core.Models.Utils;
-using SPTarkov.Server.Core.Helpers;
+using SPTarkov.Server.Core.Helpers.Server;
 using SPTarkov.Server.Core.Services;
 using SPTarkov.Server.Core.Utils;
 using SPTarkov.Reflection.Patching;
 using TheQuartermaster.Server.Patches;
 using TheQuartermaster.Server.Services;
 using TheQuartermaster.Server.Services.Contracts;
-using TheQuartermaster.Server.Services.Rewards;
 using Version = SemanticVersioning.Version;
 using Range = SemanticVersioning.Range;
 
 namespace TheQuartermaster.Server;
 
-public record QuartermasterMetadata : AbstractModMetadata
+public record QuartermasterMetadata : IModMetadata
 {
-    public override string ModGuid { get; init; } = "com.shaneeexd.thequartermaster";
-    public override string Name { get; init; } = "The Quartermaster";
-    public override string Author { get; init; } = "ShaneeexD";
-    public override List<string>? Contributors { get; init; } = null;
-    public override Version Version { get; init; } = new Version("1.4.1");
-    public override Range SptVersion { get; init; } = new Range("~4.0.13");
-    public override List<string>? Incompatibilities { get; init; } = null;
-    public override Dictionary<string, Range>? ModDependencies { get; init; } = null;
-    public override string? Url { get; init; } = null;
-    public override bool? IsBundleMod { get; init; } = false;
-    public override string License { get; init; } = "MIT";
+    public string ModGuid { get; init; } = "com.shaneeexd.thequartermaster";
+    public string Name { get; init; } = "The Quartermaster";
+    public string Author { get; init; } = "ShaneeexD";
+    public List<string>? Contributors { get; init; } = null;
+    public Version Version { get; init; } = new Version("1.4.2");
+    public Range SptVersion { get; init; } = new Range("~4.1.0");
+    public List<string>? Incompatibilities { get; init; } = null;
+    public Dictionary<string, Range>? ModDependencies { get; init; } = null;
+    public string? Url { get; init; } = null;
+    public bool HasPrepatcher { get; init; } = false;
+    public string License { get; init; } = "MIT";
 }
 
-[Injectable(TypePriority = OnLoadOrder.TraderRegistration + 1)]
+[Injectable(TypePriority = OnLoadOrder.Preload + 1)]
 public class QuartermasterPlugin(
     ISptLogger<QuartermasterPlugin> logger,
-    ISptLogger<SellPatch> sellPatchLogger,
-    ISptLogger<BuyPatch> buyPatchLogger,
-    ISptLogger<ScavengePatch> scavengePatchLogger,
-    ISptLogger<RewardProfilePatch> rewardProfilePatchLogger,
-    ISptLogger<RewardCrateOpenPatch> rewardCrateOpenPatchLogger,
     ModHelper modHelper,
     ConfigService configService,
     VanillaAllowlistService vanillaAllowlistService,
     FirestoreService firestoreService,
-    ListingService listingService,
-    ItemCloneService itemCloneService,
     MarketplaceService marketplaceService,
     MarketplaceWorkerService marketplaceWorkerService,
-    PurchaseService purchaseService,
-    ScavengedItemService scavengedItemService,
-    InventoryHelper inventoryHelper,
     TraderService traderService,
-    PaymentService paymentService,
-    QuestHelper questHelper,
-    ItemOverrideService itemOverrideService,
-    ItemHelper itemHelper,
-    DatabaseService databaseService,
-    RandomUtil randomUtil,
-    SellPatch sellPatch,
-    BuyPatch buyPatch,
-    TraderRefreshPatch traderRefreshPatch,
-    ScavengePatch scavengePatch,
-    RewardProfilePatch rewardProfilePatch,
-    RewardCrateOpenPatch rewardCrateOpenPatch,
-    CommunityRewardService communityRewardService,
     BackendConfigService backendConfigService,
     ListingConfigService listingConfigService,
     CommunityContractService communityContractService,
     WorkshopContractSyncService workshopContractSyncService,
-    HttpResponseUtil httpResponseUtil,
-    ProfileHelper profileHelper,
     HardcodedShipmentService hardcodedShipmentService,
-    PresenceHeartbeatService presenceHeartbeatService
+    PresenceHeartbeatService presenceHeartbeatService,
+    IEnumerable<IRuntimePatch> patches
 ) : IOnLoad
 {
     private static string _modPath = string.Empty;
     public static string ModPath => _modPath;
 
-    public async Task OnLoad()
+    public async Task OnLoadAsync(CancellationToken cancellationToken)
     {
         try
         {
@@ -96,9 +71,6 @@ public class QuartermasterPlugin(
             await marketplaceService.InitialiseAsync();
             await backendConfigService.LoadAsync();
             await listingConfigService.LoadAsync();
-
-            // Ensure the Tier 4 reward crate template exists in the item DB before any profile loads.
-            communityRewardService.ResolveTemplateId(4);
 
             // Ensure hardcoded shipment crate templates exist before the trader assort is built.
             hardcodedShipmentService.EnsureTemplates();
@@ -122,42 +94,11 @@ public class QuartermasterPlugin(
             marketplaceWorkerService.Start();
             presenceHeartbeatService.Start();
 
-            SellPatch.SetDependencies(
-                configService,
-                backendConfigService,
-                listingService,
-                itemCloneService,
-                marketplaceService,
-                inventoryHelper,
-                paymentService,
-                questHelper,
-                traderService,
-                itemOverrideService,
-                itemHelper,
-                profileHelper,
-                sellPatchLogger,
-                httpResponseUtil
-            );
-            BuyPatch.SetDependencies(purchaseService, buyPatchLogger);
-            TraderRefreshPatch.SetDependencies(traderService, communityContractService);
-            ScavengePatch.SetDependencies(
-                scavengePatchLogger,
-                configService,
-                backendConfigService,
-                scavengedItemService,
-                itemCloneService,
-                databaseService,
-                randomUtil
-            );
-            RewardProfilePatch.SetDependencies(communityRewardService, rewardProfilePatchLogger);
-            RewardCrateOpenPatch.SetDependencies(inventoryHelper, rewardCrateOpenPatchLogger);
-
-            sellPatch.Enable();
-            buyPatch.Enable();
-            traderRefreshPatch.Enable();
-            scavengePatch.Enable();
-            rewardProfilePatch.Enable();
-            rewardCrateOpenPatch.Enable();
+            // Enable all patches from this assembly (DI-managed in 4.1)
+            foreach (var patch in patches)
+            {
+                patch.Enable();
+            }
 
             logger.DebugInfo("[TheQuartermaster] Loaded successfully.");
         }

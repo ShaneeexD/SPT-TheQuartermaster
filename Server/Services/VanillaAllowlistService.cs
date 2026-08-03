@@ -2,7 +2,8 @@ using System.Text.Json;
 using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.Models.Common;
 using SPTarkov.Server.Core.Models.Eft.Common.Tables;
-using SPTarkov.Server.Core.Models.Utils;
+using SPTarkov.Common.Models.Logging;
+using SPTarkov.Server.Core.Models.Spt.Tables;
 using SPTarkov.Server.Core.Services;
 
 namespace TheQuartermaster.Server.Services;
@@ -11,7 +12,7 @@ namespace TheQuartermaster.Server.Services;
 public class VanillaAllowlistService(
     ISptLogger<VanillaAllowlistService> logger,
     ConfigService configService,
-    DatabaseService databaseService
+    TemplateTable templateTable
 )
 {
     private HashSet<string> _vanillaIds = [];
@@ -33,7 +34,7 @@ public class VanillaAllowlistService(
         if (!File.Exists(path))
         {
             logger.DebugWarning($"[TheQuartermaster] Vanilla items file not found at {path}, falling back to live database.");
-            _vanillaIds = new HashSet<string>(databaseService.GetItems().Keys.Select(x => x.ToString()), StringComparer.OrdinalIgnoreCase);
+            _vanillaIds = new HashSet<string>(templateTable.Items.Keys.Select(x => x.ToString()), StringComparer.OrdinalIgnoreCase);
             return;
         }
 
@@ -64,7 +65,7 @@ public class VanillaAllowlistService(
 
     public bool AllVanilla(IEnumerable<MongoId> tpls) => tpls.All(t => IsVanilla(t));
 
-    public bool IsTemplateInRuntimeDatabase(MongoId tpl) => databaseService.GetItems().ContainsKey(tpl);
+    public bool IsTemplateInRuntimeDatabase(MongoId tpl) => templateTable.Items.ContainsKey(tpl);
 
     public bool AllTemplatesInRuntimeDatabase(IEnumerable<MongoId> tpls) => tpls.All(t => IsTemplateInRuntimeDatabase(t));
 

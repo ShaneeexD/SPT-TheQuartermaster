@@ -11,7 +11,7 @@ using UnityEngine;
 
 namespace TheQuartermaster.Client
 {
-    [BepInPlugin("com.shaneeexd.thequartermaster", "The Quartermaster Client", "1.4.1")]
+    [BepInPlugin("com.shaneeexd.thequartermaster", "The Quartermaster Client", "1.4.2")]
     public class Plugin : BaseUnityPlugin
     {
         internal static ManualLogSource Log;

@@ -21,8 +21,8 @@ namespace TheQuartermaster.Client.Services
         private static ConfigEntry<string> _apiBaseUrl;
         private static string _storagePath;
         private static string _localSubmissionsPath = string.Empty;
-        private static Timer _pollTimer;
-        private static Timer _tokenRefreshTimer;
+        private static System.Threading.Timer _pollTimer;
+        private static System.Threading.Timer _tokenRefreshTimer;
         private static readonly object SubmissionsLock = new object();
 
         public static string Uuid { get; private set; } = string.Empty;
@@ -214,7 +214,7 @@ namespace TheQuartermaster.Client.Services
         private static void StartPolling()
         {
             _pollTimer?.Dispose();
-            _pollTimer = new Timer(_ => PollLinkStatus(), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+            _pollTimer = new System.Threading.Timer(_ => PollLinkStatus(), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
         }
 
         public static void StopPolling()
@@ -354,7 +354,7 @@ namespace TheQuartermaster.Client.Services
                 if (delayMs < 0) delayMs = 0;
             }
 
-            _tokenRefreshTimer = new Timer(_ => RefreshToken(), null, TimeSpan.FromMilliseconds(delayMs), Timeout.InfiniteTimeSpan);
+            _tokenRefreshTimer = new System.Threading.Timer(_ => RefreshToken(), null, TimeSpan.FromMilliseconds(delayMs), Timeout.InfiniteTimeSpan);
         }
 
         private static void RefreshToken()

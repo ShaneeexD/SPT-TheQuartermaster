@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using SPTarkov.Server.Core.Models.Utils;
+using SPTarkov.Common.Models.Logging;
 
 namespace TheQuartermaster.Server.Services;
 

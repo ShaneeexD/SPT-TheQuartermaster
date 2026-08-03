@@ -4,8 +4,10 @@ using SPTarkov.Server.Core.Models.Eft.Common;
 using SPTarkov.Server.Core.Models.Eft.Common.Tables;
 using SPTarkov.Server.Core.Models.Eft.Profile;
 using SPTarkov.Server.Core.Models.Enums;
-using SPTarkov.Server.Core.Models.Utils;
+using SPTarkov.Server.Core.Models.Spt.Tables;
+using SPTarkov.Common.Models.Logging;
 using SPTarkov.Server.Core.Services;
+using SPTarkov.Server.Core.Services.Commerce;
 using TheQuartermaster.Server.Models;
 using TheQuartermaster.Server.Models.Rewards;
 using TheQuartermaster.Server.Services;
@@ -18,7 +20,7 @@ public class CommunityRewardService(
     ConfigService configService,
     RewardFileService rewardFileService,
     MailSendService mailSendService,
-    DatabaseService databaseService,
+    LocaleTable localeTable,
     RealtimeDatabaseService realtimeDatabaseService
 )
 {
@@ -255,12 +257,12 @@ public class CommunityRewardService(
             return;
         }
 
-        var locales = databaseService.GetTables().Locales.Global;
+        var locales = localeTable.Global;
         foreach (var (_, localeData) in locales)
         {
             localeData.AddTransformer(ld =>
             {
-                ld ??= new Dictionary<string, string>();
+                ld ??= new GlobalLocaleDictionary();
                 ld[templateId + " Name"] = info.Name;
                 ld[templateId + " ShortName"] = info.ShortName;
                 ld[templateId + " Description"] = info.Description;

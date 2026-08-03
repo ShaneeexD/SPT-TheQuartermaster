@@ -4,7 +4,7 @@
     <RootNamespace>TheQuartermaster.Client</RootNamespace>
     <LangVersion>latest</LangVersion>
     <OutputType>Library</OutputType>
-    <Version>1.4.1</Version>
+    <Version>1.4.2</Version>
     <OutputPath>bin\$(Configuration)\</OutputPath>
     <AssemblyName>TheQuartermaster.Client</AssemblyName>
   </PropertyGroup>

@@ -2,7 +2,7 @@ using System.Reflection;
 using HarmonyLib;
 using SPTarkov.DI.Annotations;
 using SPTarkov.Reflection.Patching;
-using SPTarkov.Server.Core.Helpers;
+using SPTarkov.Server.Core.Helpers.Traders;
 using SPTarkov.Server.Core.Models.Common;
 using TheQuartermaster.Server.Services;
 using TheQuartermaster.Server.Services.Contracts;
@@ -13,17 +13,12 @@ namespace TheQuartermaster.Server.Patches;
 public class TraderRefreshPatch : AbstractPatch
 {
     private static TraderService? _traderService;
-    private static CommunityContractService? _communityContractService;
+    private static IServiceProvider? _serviceProvider;
 
-    public TraderRefreshPatch()
-        : base("TheQuartermaster.TraderRefreshPatch")
-    {
-    }
-
-    public static void SetDependencies(TraderService traderService, CommunityContractService communityContractService)
+    public TraderRefreshPatch(TraderService traderService, IServiceProvider serviceProvider) : base("TheQuartermaster.TraderRefreshPatch")
     {
         _traderService = traderService;
-        _communityContractService = communityContractService;
+        _serviceProvider = serviceProvider;
     }
 
     protected override MethodBase GetTargetMethod()
@@ -40,6 +35,8 @@ public class TraderRefreshPatch : AbstractPatch
         }
 
         _traderService?.RefreshAssort(sessionId).GetAwaiter().GetResult();
-        _communityContractService?.RefreshAsync().GetAwaiter().GetResult();
+
+        var communityContractService = _serviceProvider?.GetService(typeof(CommunityContractService)) as CommunityContractService;
+        communityContractService?.RefreshAsync().GetAwaiter().GetResult();
     }
 }

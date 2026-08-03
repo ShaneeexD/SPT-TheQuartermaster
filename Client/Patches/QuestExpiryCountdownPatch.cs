@@ -8,6 +8,7 @@ using HarmonyLib;
 using SPT.Reflection.Patching;
 using TMPro;
 using UnityEngine;
+using EFT;
 
 namespace TheQuartermaster.Client.Patches;
 
@@ -20,10 +21,10 @@ public class QuestExpiryCountdownPatch : ModulePatch
 
     protected override MethodBase GetTargetMethod()
     {
-        var method = AccessTools.DeclaredMethod(typeof(NotesTaskDescription), "Show", new[] { typeof(QuestClass), typeof(object) });
+        var method = AccessTools.DeclaredMethod(typeof(NotesTaskDescription), "Show", new[] { typeof(Quest), typeof(IImageLoader) });
         if (method == null)
         {
-            method = AccessTools.DeclaredMethod(typeof(NotesTaskDescription), "Show", new Type[] { typeof(QuestClass), AccessTools.TypeByName("GInterface221") });
+            method = AccessTools.DeclaredMethod(typeof(NotesTaskDescription), "Show", new Type[] { typeof(Quest), typeof(object) });
         }
 
         if (method == null && Plugin.DebugLogging)
@@ -36,7 +37,7 @@ public class QuestExpiryCountdownPatch : ModulePatch
     }
 
     [PatchPostfix]
-    public static void Postfix(NotesTaskDescription __instance, QuestClass quest)
+    public static void Postfix(NotesTaskDescription __instance, Quest quest)
     {
         try
         {

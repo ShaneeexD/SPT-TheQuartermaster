@@ -1,15 +1,15 @@
 using System.Reflection;
 using HarmonyLib;
+using SPTarkov.Common.Models.Logging;
 using SPTarkov.DI.Annotations;
 using SPTarkov.Reflection.Patching;
 using SPTarkov.Server.Core.Controllers;
-using SPTarkov.Server.Core.Helpers;
+using SPTarkov.Server.Core.Helpers.Profile;
 using SPTarkov.Server.Core.Models.Common;
 using SPTarkov.Server.Core.Models.Eft.Common;
 using SPTarkov.Server.Core.Models.Eft.Common.Tables;
 using SPTarkov.Server.Core.Models.Eft.Inventory;
 using SPTarkov.Server.Core.Models.Eft.ItemEvent;
-using SPTarkov.Server.Core.Models.Utils;
 using SPTarkov.Server.Core.Services;
 using TheQuartermaster.Server.Services;
 
@@ -31,7 +31,7 @@ public class RewardCrateOpenPatch : AbstractPatch
         "66582972ac60f009f270d2b3"
     };
 
-    public static void SetDependencies(InventoryHelper inventoryHelper, ISptLogger<RewardCrateOpenPatch> logger)
+    public RewardCrateOpenPatch(InventoryHelper inventoryHelper, ISptLogger<RewardCrateOpenPatch> logger) : base("TheQuartermaster.RewardCrateOpenPatch")
     {
         _inventoryHelper = inventoryHelper;
         _logger = logger;

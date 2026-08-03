@@ -1,18 +1,22 @@
 using System.Reflection;
 using System.Text.RegularExpressions;
 using HarmonyLib;
+using SPTarkov.Common.Models.Logging;
 using SPTarkov.Reflection.Patching;
 using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.Extensions;
-using SPTarkov.Server.Core.Helpers;
+using SPTarkov.Server.Core.Helpers.Items;
+using SPTarkov.Server.Core.Helpers.Profile;
+using SPTarkov.Server.Core.Helpers.Quest;
+using SPTarkov.Server.Core.Helpers.Commerce;
 using SPTarkov.Server.Core.Services;
+using SPTarkov.Server.Core.Services.Commerce;
 using SPTarkov.Server.Core.Models.Common;
 using SPTarkov.Server.Core.Models.Eft.Common;
 using SPTarkov.Server.Core.Models.Eft.Common.Tables;
 using SPTarkov.Server.Core.Models.Eft.Trade;
 using SPTarkov.Server.Core.Models.Eft.ItemEvent;
 using SPTarkov.Server.Core.Models.Enums;
-using SPTarkov.Server.Core.Models.Utils;
 using SPTarkov.Server.Core.Utils;
 using TheQuartermaster.Server.Services;
 using TheQuartermaster.Server.Services.Contracts;
@@ -38,7 +42,7 @@ public class SellPatch : AbstractPatch
     private static ISptLogger<SellPatch>? _logger;
     private static HttpResponseUtil? _httpResponseUtil;
 
-    public static void SetDependencies(
+    public SellPatch(
         ConfigService configService,
         BackendConfigService backendConfigService,
         ListingService listingService,
@@ -53,7 +57,7 @@ public class SellPatch : AbstractPatch
         ProfileHelper profileHelper,
         ISptLogger<SellPatch> logger,
         HttpResponseUtil httpResponseUtil
-    )
+    ) : base("TheQuartermaster.SellPatch")
     {
         _configService = configService;
         _backendConfigService = backendConfigService;
@@ -81,7 +85,7 @@ public class SellPatch : AbstractPatch
         PmcData profileWithItemsToSell,
         PmcData profileToReceiveMoney,
         ProcessSellTradeRequestData sellRequest,
-        MongoId sessionID,
+        MongoId sessionId,
         ItemEventRouterResponse output
     )
     {
@@ -98,7 +102,7 @@ public class SellPatch : AbstractPatch
         try
         {
             // Block SPT Developer edition profiles from selling, except for the Dev2 bypass account
-            var fullProfile = _profileHelper?.GetFullProfile(sessionID);
+            var fullProfile = _profileHelper?.GetFullProfile(sessionId);
             var sellerName = profileWithItemsToSell.Info?.Nickname ?? "Unknown PMC";
             if (fullProfile?.ProfileInfo?.Edition == "SPT Developer" && fullProfile?.ProfileInfo?.Username != "Dev2")
             {
@@ -171,8 +175,8 @@ public class SellPatch : AbstractPatch
 
                 var listing = _listingService?.CreateListing(
                     deserialized,
-                    sessionID.ToString(),
-                    sessionID.ToString(),
+                    sessionId.ToString(),
+                    sessionId.ToString(),
                     sellerName
                 );
 
@@ -224,11 +228,11 @@ public class SellPatch : AbstractPatch
                     _logger?.DebugInfo($"[TheQuartermaster] Upload consent disabled; selling {itemIdToFind} locally without global listing.");
                 }
 
-                _inventoryHelper?.RemoveItem(profileWithItemsToSell, itemId, sessionID, output);
+                _inventoryHelper?.RemoveItem(profileWithItemsToSell, itemId, sessionId, output);
                 uploaded++;
             }
 
-            _logger?.DebugInfo($"[TheQuartermaster] Uploaded {uploaded} listing(s) from player {sessionID}.");
+            _logger?.DebugInfo($"[TheQuartermaster] Uploaded {uploaded} listing(s) from player {sessionId}.");
 
             if (totalComputedPrice > 0 && sellRequest.Price != (int)totalComputedPrice)
             {
@@ -236,7 +240,7 @@ public class SellPatch : AbstractPatch
                 sellRequest.Price = (int)totalComputedPrice;
             }
 
-            _paymentService?.GiveProfileMoney(profileToReceiveMoney, sellRequest.Price, sellRequest, output, sessionID);
+            _paymentService?.GiveProfileMoney(profileToReceiveMoney, sellRequest.Price, sellRequest, output, sessionId);
 
             return false; // Skip original SellItem
         }
